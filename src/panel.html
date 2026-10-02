@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: yuexin-asset:; style-src 'self'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>月薪喵的小窝</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <header class="hero">
+    <img src="../assets/yuexin-idle.png" alt="月薪喵">
+    <div><div class="eyebrow">YUE XIN MIAO</div><h1>月薪喵的小窝</h1><p>陪你工作，也记得提醒你休息。</p></div>
+  </header>
+  <nav class="tabs" aria-label="功能">
+    <button data-tab="reminders" class="active">⏰ 提醒</button>
+    <button data-tab="chat">💬 聊天</button>
+    <button data-tab="actions">🐾 动作</button>
+    <button data-tab="usage">⚡ 额度</button>
+    <button data-tab="settings">⚙ 设置</button>
+  </nav>
+  <main>
+    <section id="reminders" class="page active">
+      <div class="section-title"><div><h2>提醒事项</h2><p>时间一到，月薪喵会跳起来叫你。</p></div></div>
+      <form id="reminder-form" class="card form">
+        <label>提醒我做什么<input id="reminder-title" maxlength="100" placeholder="比如：喝水、开会、交报告" required></label>
+        <div class="row"><label id="once-field">提醒时间<input id="reminder-time" type="datetime-local"></label><label id="daily-field" hidden>每天几点<input id="daily-time" type="time" value="09:00"></label><label class="repeat">频率<select id="reminder-repeat"><option value="once">仅一次</option><option value="daily">每天</option></select></label></div>
+        <button class="primary" type="submit">添加提醒</button><p id="reminder-error" class="error" role="alert"></p>
+      </form>
+      <h3 class="list-heading">我的提醒</h3>
+      <div id="reminder-list" class="list"></div>
+    </section>
+    <section id="chat" class="page">
+      <div class="section-title"><div><h2>和月薪喵聊聊</h2><p>通过本机已登录的 Codex 连接 GPT。</p></div></div>
+      <div class="chat-card card">
+        <div id="chat-history" class="chat-history" aria-live="polite"><div class="message cat-message">喵～今天有什么想和我说的吗？</div></div>
+        <form id="chat-form" class="chat-form"><input id="chat-input" maxlength="500" placeholder="和月薪喵说句话…" autocomplete="off"><button id="chat-send" class="primary" type="submit">发送</button></form>
+      </div>
+      <p class="hint">聊天会使用你的 Codex / Work 额度。首次回复可能稍慢。</p>
+    </section>
+    <section id="usage" class="page">
+      <div class="section-title"><div><h2>剩余额度</h2><p>从本机 Codex 账户读取。</p></div><button id="refresh-limits" class="secondary">刷新</button></div>
+      <div id="limit-list" class="limit-list"></div>
+      <p id="limit-status" class="status"></p>
+      <button id="connect-account" class="primary">连接 ChatGPT 账户</button>
+      <button id="select-codex" class="text-button">选择 Codex 程序…</button>
+      <p id="connect-hint" class="hint">首次使用需要在浏览器完成登录。登录由 Codex 管理，桌宠不会读取你的密码。</p>
+      <div class="card info"><strong>额度说明</strong><p>这里显示 Codex / Work 的使用窗口，剩余百分比由官方已用百分比计算。Chat 聊天消息额度是另一项，需在 ChatGPT 的设置中查看。</p><button id="open-chatgpt" class="text-button">打开 ChatGPT ↗</button></div>
+    </section>
+    <section id="actions" class="page">
+      <div class="section-title"><div><h2>我的图片动作</h2><p>待机时偶尔随机播放，结束后恢复原来的月薪猫。</p></div></div>
+      <div class="card info import-card"><strong>添加更多月薪猫动作</strong><p>支持批量导入 GIF、动态 WebP、APNG 和普通图片。导入后默认参与随机播放，轻点桌宠也会随机选一个。</p><div class="import-row"><label>播放秒数<input id="action-duration" type="number" min="2" max="120" value="5"></label><button id="import-action" class="primary">添加图片 / GIF</button></div><p id="action-status" class="status" role="status"></p></div>
+      <p id="random-action-count" class="hint"></p>
+      <div id="custom-action-list" class="list"></div>
+      <h3 class="list-heading">默认互动</h3><div id="action-list" class="action-grid"></div>
+    </section>
+    <section id="settings" class="page">
+      <div class="section-title"><div><h2>桌宠设置</h2><p>调好习惯，让月薪喵陪在你身边。</p></div></div>
+      <div class="card setting"><div><strong>开机自启动</strong><small>登录 Windows 后自动显示月薪猫</small></div><input id="auto-start" type="checkbox"></div>
+      <p id="startup-status" class="hint" role="status"></p>
+      <div class="card setting"><div><strong>始终置顶</strong><small>让月薪喵浮在其他窗口上方</small></div><input id="always-on-top" type="checkbox" checked></div>
+      <div class="card size-setting"><div class="size-heading"><strong>桌宠大小</strong><output id="size-value" for="pet-scale">100%</output></div><input id="pet-scale" type="range" min="60" max="180" step="5" value="100" aria-label="桌宠大小"><div class="size-labels"><span>小 · 60%</span><button id="reset-size" class="text-button">恢复 100%</button><span>大 · 180%</span></div></div>
+      <div class="card setting"><div><strong>待机随机播放动作</strong><small>偶尔播放动作库里的 GIF 和图片</small></div><input id="idle-animations" type="checkbox" checked></div>
+      <div class="card setting interval-setting"><div><strong>随机播放间隔</strong><small>播放结束后等待，时间会略有随机变化</small></div><select id="random-interval" aria-label="随机播放间隔"><option value="15">约 15 秒</option><option value="30">约 30 秒</option><option value="60">约 1 分钟</option><option value="120">约 2 分钟</option></select></div>
+      <div class="card info"><strong>互动方法</strong><p>按住月薪喵拖动；轻点会随机播放图片动作。“动作”页可以批量添加图片和 GIF，每个动作都能选择是否参与随机、调整播放时长。关闭面板后桌宠仍会运行。</p></div>
+    </section>
+  </main>
+  <script src="actions.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>

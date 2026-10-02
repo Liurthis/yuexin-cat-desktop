@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "actions": [
+    {
+      "id": "9e1049df-cbf2-4eae-a93e-180cf5766f2b",
+      "extension": "gif",
+      "name": "13435385834416837",
+      "duration": 5000,
+      "random": true
+    },
+    {
+      "id": "5acddfd9-9a76-4072-99b5-380232a7972b",
+      "extension": "gif",
+      "name": "13435385844663512",
+      "duration": 5000,
+      "random": true
+    },
+    {
+      "id": "8ae79b72-ae5c-4a0d-8001-a13e0c29dbcb",
+      "extension": "gif",
+      "name": "13435385859796329",
+      "duration": 5000,
+      "random": true
+    },
+    {
+      "id": "fb722314-63b0-4c98-852c-33ce30817f1c",
+      "extension": "gif",
+      "name": "13435386663193695",
+      "duration": 2000,
+      "random": true
+    },
+    {
+      "id": "515e41dd-822d-490b-bcc9-d48c3e30bd59",
+      "extension": "gif",
+      "name": "13435386717229440",
+      "duration": 5000,
+      "random": true
+    },
+    {
+      "id": "3d1d3784-0ff6-4d38-92c4-0394097a95cc",
+      "extension": "gif",
+      "name": "爱你",
+      "duration": 5000,
+      "random": true
+    },
+    {
+      "id": "9a20d58e-7ff9-405c-ac01-6dc2d4c1a9ac",
+      "extension": "gif",
+      "name": "吃饭啦",
+      "duration": 5000,
+      "random": true
+    },
+    {
+      "id": "8065def2-4e39-4a21-b417-1f1dffdb8faa",
+      "extension": "gif",
+      "name": "喜欢",
+      "duration": 5000,
+      "random": true
+    }
+  ]
+}

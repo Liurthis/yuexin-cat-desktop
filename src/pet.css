@@ -1,0 +1,29 @@
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; user-select: none; font-family: "Microsoft YaHei", sans-serif; }
+.stage { width: 260px; height: 285px; position: absolute; left: 0; top: 0; transform-origin: top left; }
+.bubble { position: absolute; z-index: 3; left: 5px; top: 3px; max-width: 250px; min-width: 60px; padding: 8px 12px; border: 2px solid #6d4938; border-radius: 17px 17px 17px 5px; background: #fff9ee; color: #5a3d32; font-size: 12px; line-height: 1.35; box-shadow: 0 3px 0 #dbc6ad; opacity: 0; transform: translateY(7px) scale(.95); transition: opacity .2s, transform .2s; pointer-events: none; }
+.bubble.show { opacity: 1; transform: translateY(0) scale(1); }
+.pet { position: absolute; left: 0; top: 25px; width: 260px; height: 230px; touch-action: none; cursor: grab; }
+.pet.dragging { cursor: grabbing; }
+.cat { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; image-rendering: auto; transform-origin: 50% 85%; filter: drop-shadow(0 3px 2px rgba(86,55,37,.1)); }
+.phone { visibility: hidden; }
+.pet:not(.quiet):not(.performing):not(.dragging) .idle { animation: breathe 4s ease-in-out infinite; }
+.pet.hop .idle, .pet.alarm .idle { animation: hop .8s ease-in-out infinite; }
+.pet.wiggle .idle { animation: wiggle .65s ease-in-out infinite; }
+.pet.phone .idle, .pet.custom .idle { visibility: hidden; }
+.pet.phone .phone { visibility: visible; animation: phone 2s ease-in-out infinite; }
+.pet.dragging .idle { transform: rotate(-3deg); }
+.custom-animation { filter: none; }
+.effect { position: absolute; top: 27px; right: 5px; font-size: 23px; pointer-events: none; opacity: 0; }
+.pet.performing .effect { animation: effect 1.5s ease-out infinite; }
+.dock { position: absolute; z-index: 4; left: 11px; bottom: 1px; display: flex; gap: 3px; align-items: center; padding: 5px 7px; border: 1px solid #ddc7af; border-radius: 18px; background: rgba(255,249,238,.96); box-shadow: 0 3px 8px rgba(89,58,36,.17); opacity: .2; transition: opacity .18s; }
+body.over-pet .dock { opacity: 1; }
+.dock button { border: none; border-radius: 12px; background: transparent; width: 38px; height: 29px; cursor: pointer; font-size: 17px; }
+.dock button:hover { background: #f7e8d5; }
+.dock button.usage { font-size: 12px; font-weight: 800; color: #305fba; width: 49px; }
+@keyframes breathe { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes hop { 0%,100% { transform: translateY(0); } 45% { transform: translateY(-22px); } }
+@keyframes wiggle { 0%,100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+@keyframes phone { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes effect { 0% { opacity: 0; transform: translateY(7px) scale(.6); } 35% { opacity: 1; } 100% { opacity: 0; transform: translateY(-20px) scale(1.15); } }

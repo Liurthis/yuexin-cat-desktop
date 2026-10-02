@@ -1,0 +1,18 @@
+{
+  "name": "yuexin-cat-desktop",
+  "version": "0.5.1",
+  "private": true,
+  "description": "月薪喵桌面宠物：互动、提醒与 Codex 用量",
+  "productName": "月薪喵",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "package:win": "node scripts/package-win.js"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "44.5.1",
+    "png-to-ico": "^3.0.2"
+  }
+}
