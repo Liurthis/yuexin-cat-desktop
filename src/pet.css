@@ -4,6 +4,29 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .stage { width: 260px; height: 285px; position: absolute; left: 0; top: 0; transform-origin: top left; }
 .bubble { position: absolute; z-index: 3; left: 5px; top: 3px; max-width: 250px; min-width: 60px; padding: 8px 12px; border: 2px solid #6d4938; border-radius: 17px 17px 17px 5px; background: #fff9ee; color: #5a3d32; font-size: 12px; line-height: 1.35; box-shadow: 0 3px 0 #dbc6ad; opacity: 0; transform: translateY(7px) scale(.95); transition: opacity .2s, transform .2s; pointer-events: none; }
 .bubble.show { opacity: 1; transform: translateY(0) scale(1); }
+.satiety-button { position:absolute; z-index:7; top:27px; right:12px; width:40px; height:40px; padding:0; border:2px solid #fffaf1; border-radius:50%; background:conic-gradient(#579464 252deg,#e9e1d6 0deg); box-shadow:0 2px 6px rgba(86,55,37,.2); cursor:pointer; display:grid; place-items:center; }
+.satiety-button::before { content:''; position:absolute; inset:5px; border-radius:50%; background:#fffaf1; }
+.satiety-number { position:relative; z-index:1; color:#315d3d; font-size:11px; font-weight:800; line-height:1; }
+.satiety-button.hungry .satiety-number { color:#b2362e; }
+.satiety-button:hover { box-shadow:0 2px 8px rgba(86,55,37,.32); }
+.satiety-button:focus-visible { outline:2px solid #315eb5; outline-offset:2px; }
+.quick-feed-menu { position:absolute; z-index:8; top:75px; right:12px; width:224px; padding:10px; border:1px solid #d8bea2; border-radius:15px; background:#fffaf1; color:#493227; box-shadow:0 4px 12px rgba(86,55,37,.2); transform-origin:top right; }
+.quick-feed-heading { display:flex; align-items:center; justify-content:space-between; gap:6px; margin:0 2px 6px; }
+.quick-feed-heading strong { font-size:15px; }
+.quick-feed-heading button { width:22px; height:22px; border:0; border-radius:50%; background:transparent; color:#97775d; font-size:18px; line-height:1; cursor:pointer; }
+.quick-feed-heading button:hover { background:#f4e4d0; }
+.quick-food { display:flex; width:100%; align-items:center; justify-content:space-between; gap:8px; padding:8px; margin-top:5px; border:1px solid #ead7c1; border-radius:9px; background:#fffdf8; color:#493227; font-family:inherit; font-size:16px; font-weight:600; line-height:20px; cursor:pointer; }
+.quick-food small { font-size:14px; font-weight:700; color:#38663d; }
+.quick-food:hover { background:#f5e6d2; }
+.quick-food:disabled { opacity:.5; cursor:default; }
+#quick-feed-status { margin:7px 2px 0; color:#614737; font-size:13px; line-height:1.4; }
+.quick-feed-menu.compact { padding:5px; border-radius:12px; }
+.quick-feed-menu.compact .quick-feed-heading { margin-bottom:3px; }
+.quick-feed-menu.compact .quick-feed-heading strong { font-size:13px; }
+.quick-feed-menu.compact .quick-feed-heading button { width:18px; height:18px; }
+.quick-feed-menu.compact .quick-food { padding:4px 6px; margin-top:3px; font-size:14px; line-height:16px; }
+.quick-feed-menu.compact .quick-food small { font-size:13px; }
+.quick-feed-menu.compact #quick-feed-status { margin-top:4px; font-size:12.5px; line-height:16px; }
 .pet { position: absolute; left: 0; top: 25px; width: 260px; height: 230px; touch-action: none; cursor: grab; }
 .pet.dragging { cursor: grabbing; }
 .cat { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; image-rendering: auto; transform-origin: 50% 85%; filter: drop-shadow(0 3px 2px rgba(86,55,37,.1)); }

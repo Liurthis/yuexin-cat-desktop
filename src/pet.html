@@ -10,6 +10,14 @@
 <body>
   <div id="stage" class="stage">
     <div id="bubble" class="bubble" role="status"></div>
+    <button id="feeding" class="satiety-button" title="饱腹度 70/100 · 点击喂食" aria-label="饱腹度 70/100，点击展开喂食" aria-expanded="false" aria-controls="quick-feed-menu"><span id="satiety-number" class="satiety-number">70</span></button>
+    <div id="quick-feed-menu" class="quick-feed-menu" role="group" aria-label="喂食选项" hidden>
+      <div class="quick-feed-heading"><strong>喂一点好吃的</strong><button id="quick-feed-close" aria-label="收起喂食选项" title="收起">×</button></div>
+      <button id="quick-feed-fish" class="quick-food"><span>🐟 小鱼干</span><small>+20</small></button>
+      <button id="quick-feed-snack" class="quick-food"><span>🍪 小零食</span><small>+10</small></button>
+      <button id="quick-feed-can" class="quick-food"><span>🥫 猫罐头</span><small>+35</small></button>
+      <p id="quick-feed-status" role="status" aria-live="polite">选一点喜欢的食物。</p>
+    </div>
     <div id="pet" class="pet" aria-label="月薪喵，拖动或点击随机播放动作">
       <img id="idle-image" class="cat idle" src="../assets/yuexin-idle.png" alt="月薪喵">
       <img id="phone-image" class="cat phone" src="../assets/yuexin-phone.png" alt="月薪喵摸鱼">

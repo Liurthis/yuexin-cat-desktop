@@ -10,6 +10,7 @@ const { normalizeScale, petBounds, validCustomAction } = require('./pet-settings
 const { imageExtension, normalizeDuration } = require('./action-library');
 const { resolveCodexPath } = require('./codex-path');
 const { seedBundledActions } = require('./bundled-actions');
+const { FOODS, normalizeFeeding, advanceSatiety, feedPet } = require('./feeding');
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'yuexin-asset', privileges: { standard: true, secure: true, corsEnabled: true, supportFetchAPI: true } }]);
 
@@ -24,6 +25,8 @@ let limits = { buckets: [], status: '正在读取…', updatedAt: null };
 const codex = new CodexClient({ getCliPath: () => state?.codexPath });
 let ignoringMouse = true;
 let petDragging = false;
+let feedingBusy = false;
+let feedingEndTimer;
 const startupName = '月薪喵桌宠';
 
 function loginOptions() {
@@ -62,9 +65,10 @@ function loadState() {
       bundledActionsVersion: Number(loaded.bundledActionsVersion) || 0,
       codexPath: typeof loaded.codexPath === 'string' ? loaded.codexPath : null,
       customActions: Array.isArray(loaded.customActions) ? loaded.customActions.filter(validCustomAction).map((entry) => ({ ...entry, random: entry.random !== false })) : [],
+      feeding: normalizeFeeding({ ...loaded.feeding, image: validCustomAction(loaded.feeding?.image) ? loaded.feeding.image : null }),
     };
   } catch {
-    return { reminders: [], petPosition: null, alwaysOnTop: true, petScale: 1, idleAnimations: true, randomInterval: 30, bundledActionsVersion: 0, codexPath: null, customActions: [] };
+    return { reminders: [], petPosition: null, alwaysOnTop: true, petScale: 1, idleAnimations: true, randomInterval: 30, bundledActionsVersion: 0, codexPath: null, customActions: [], feeding: normalizeFeeding() };
   }
 }
 
@@ -76,7 +80,37 @@ function saveState() {
 }
 
 function publicState() {
-  return { reminders: state.reminders, alwaysOnTop: state.alwaysOnTop, autoStart: getAutoStart(), petScale: state.petScale, idleAnimations: state.idleAnimations, randomInterval: state.randomInterval, customActions: state.customActions, limits };
+  return { reminders: state.reminders, alwaysOnTop: state.alwaysOnTop, autoStart: getAutoStart(), petScale: state.petScale, idleAnimations: state.idleAnimations, randomInterval: state.randomInterval, customActions: state.customActions, feeding: { satiety: state.feeding.satiety, isEating: feedingBusy, foods: FOODS, image: feedingImage(), duration: state.feeding.duration }, limits };
+}
+
+function feedingImage() {
+  const entry = state.feeding.image;
+  const available = entry && fs.existsSync(path.join(app.getPath('userData'), 'feeding-assets', `${entry.id}.${entry.extension}`));
+  return available ? { name: entry.name, url: `yuexin-asset://feeding/${entry.id}.${entry.extension}`, preset: false } : { name: '吃冰淇淋（预设）', url: 'yuexin-asset://feeding/preset.gif', preset: true };
+}
+
+function finishFeeding() {
+  clearTimeout(feedingEndTimer);
+  if (!feedingBusy) return;
+  feedingBusy = false;
+  broadcastState();
+}
+
+function refreshSatiety() {
+  if (advanceSatiety(state.feeding)) { saveState(); broadcastState(); }
+}
+
+function storeFeedingImage(source, name) {
+  if (fs.statSync(source).size > 20 * 1024 * 1024) throw new Error('吃饭图片需小于 20 MB');
+  const bytes = fs.readFileSync(source);
+  const entry = { id: crypto.randomUUID(), extension: imageExtension(bytes), name: name.slice(0, 40) || '吃饭动作', duration: state.feeding.duration };
+  const folder = path.join(app.getPath('userData'), 'feeding-assets');
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, `${entry.id}.${entry.extension}`), bytes);
+  const previous = state.feeding.image;
+  state.feeding.image = entry;
+  saveState(); broadcastState();
+  if (previous) { try { fs.unlinkSync(path.join(folder, `${previous.id}.${previous.extension}`)); } catch {} }
 }
 
 function setPetInteractive(interactive) {
@@ -135,6 +169,12 @@ function showPanel(tab = 'reminders') {
   }
 }
 
+function showQuickFeeding() {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  petWindow.show();
+  petWindow.webContents.send('feeding:openMenu');
+}
+
 function createPet() {
   const display = screen.getPrimaryDisplay().workArea;
   let bounds = petBounds(state.petScale, null, display);
@@ -183,6 +223,7 @@ function createPet() {
     Menu.buildFromTemplate([
       { label: '打开小窝', click: () => showPanel() },
       { label: '添加提醒', click: () => showPanel('reminders') },
+      { label: '喂月薪喵吃东西', click: showQuickFeeding },
       { label: '选择 / 添加动作', click: () => showPanel('actions') },
       { label: '调整大小', click: () => showPanel('settings') },
       { label: '查看 GPT 额度', click: () => showPanel('usage') },
@@ -206,6 +247,7 @@ function createTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开小窝', click: () => showPanel() },
     { label: '显示月薪喵', click: () => petWindow?.show() },
+    { label: '喂月薪喵', click: showQuickFeeding },
     { label: '查看 GPT 额度', click: () => showPanel('usage') },
     { type: 'separator' },
     { label: '退出', click: () => app.quit() },
@@ -238,7 +280,51 @@ function checkReminders() {
 }
 
 function registerIpc() {
-  ipcMain.handle('state:get', () => publicState());
+  ipcMain.handle('state:get', () => { refreshSatiety(); return publicState(); });
+  ipcMain.handle('feeding:feed', (event, foodId) => {
+    if (event.sender !== panelWindow?.webContents && event.sender !== petWindow?.webContents) throw new Error('请从桌宠的喂食选项选择食物');
+    if (feedingBusy) throw new Error('还在吃呢，等吃完再喂吧～');
+    if (!petWindow || petWindow.isDestroyed()) throw new Error('桌宠还没有准备好');
+    const result = feedPet(state.feeding, foodId);
+    saveState();
+    feedingBusy = true;
+    broadcastState();
+    petWindow.show();
+    petWindow.webContents.send('pet:feed', { ...feedingImage(), duration: state.feeding.duration });
+    feedingEndTimer = setTimeout(finishFeeding, state.feeding.duration + 10000);
+    return result;
+  });
+  ipcMain.on('feeding:finished', (event) => { if (event.sender === petWindow?.webContents) finishFeeding(); });
+  ipcMain.handle('feeding:setImage', (event, actionId) => {
+    if (event.sender !== panelWindow?.webContents) throw new Error('请在设置页修改吃饭图片');
+    if (feedingBusy) throw new Error('等吃完后再更换图片吧～');
+    if (actionId === 'preset') {
+      const previous = state.feeding.image;
+      state.feeding.image = null;
+      saveState(); broadcastState();
+      if (previous) { try { fs.unlinkSync(path.join(app.getPath('userData'), 'feeding-assets', `${previous.id}.${previous.extension}`)); } catch {} }
+      return;
+    }
+    const entry = state.customActions.find((item) => item.id === actionId);
+    if (!entry) throw new Error('这个动作不存在，请重新选择');
+    storeFeedingImage(path.join(app.getPath('userData'), 'action-assets', `${entry.id}.${entry.extension}`), entry.name);
+  });
+  ipcMain.handle('feeding:importImage', async (event) => {
+    if (event.sender !== panelWindow?.webContents) throw new Error('请在设置页修改吃饭图片');
+    if (feedingBusy) throw new Error('等吃完后再更换图片吧～');
+    const result = await dialog.showOpenDialog(panelWindow, { title: '选择月薪喵的吃饭图片 / GIF', properties: ['openFile'], filters: [{ name: '图片 / 动图', extensions: ['gif', 'webp', 'png', 'apng', 'jpg', 'jpeg'] }] });
+    if (result.canceled) return false;
+    if (feedingBusy) throw new Error('等吃完后再更换图片吧～');
+    const source = result.filePaths[0];
+    storeFeedingImage(source, path.basename(source, path.extname(source)));
+    return true;
+  });
+  ipcMain.handle('feeding:duration', (event, seconds) => {
+    if (event.sender !== panelWindow?.webContents) throw new Error('请在设置页修改吃饭时长');
+    if (feedingBusy) throw new Error('等吃完后再调整时长吧～');
+    state.feeding.duration = normalizeDuration(seconds);
+    saveState(); broadcastState();
+  });
   ipcMain.handle('panel:open', (_event, tab) => showPanel(tab));
   ipcMain.handle('pet:getPosition', () => petWindow?.getPosition() || [0, 0]);
   ipcMain.on('pet:dragging', (event, dragging) => {
@@ -387,10 +473,21 @@ app.whenReady().then(() => {
   app.setAppUserModelId('com.yuexin.desktop-pet');
   state = loadState();
   if (seedBundledActions(state, path.join(__dirname, '..', 'assets', 'actions'), path.join(app.getPath('userData'), 'action-assets'))) saveState();
+  advanceSatiety(state.feeding);
+  saveState();
   if (process.argv.includes('--enable-autostart')) setAutoStart(true);
   if (process.argv.includes('--disable-autostart')) setAutoStart(false);
   protocol.handle('yuexin-asset', async (request) => {
     const url = new URL(request.url);
+    if (url.hostname === 'feeding') {
+      const entry = state.feeding.image;
+      const source = url.pathname === '/preset.gif' ? path.join(__dirname, '..', 'assets', 'yuexin-eating.gif') : entry && url.pathname === `/${entry.id}.${entry.extension}` ? path.join(app.getPath('userData'), 'feeding-assets', `${entry.id}.${entry.extension}`) : null;
+      if (!source || !fs.existsSync(source)) return new Response('Not found', { status: 404 });
+      const response = await net.fetch(pathToFileURL(source).toString());
+      const headers = new Headers(response.headers);
+      headers.set('Access-Control-Allow-Origin', '*');
+      return new Response(response.body, { status: response.status, headers });
+    }
     const entry = state.customActions.find((item) => url.hostname === 'actions' && url.pathname === `/${item.id}.${item.extension}`);
     if (!entry) return new Response('Not found', { status: 404 });
     const response = await net.fetch(pathToFileURL(path.join(app.getPath('userData'), 'action-assets', `${entry.id}.${entry.extension}`)).toString());
@@ -407,6 +504,7 @@ app.whenReady().then(() => {
   createTray();
   setInterval(checkReminders, 15000);
   setInterval(refreshLimits, 120000);
+  setInterval(refreshSatiety, 60000);
   checkReminders();
   refreshLimits();
 });

@@ -4,6 +4,8 @@ const list = document.getElementById('reminder-list');
 const limitList = document.getElementById('limit-list');
 const limitStatus = document.getElementById('limit-status');
 let currentState;
+let feedPending = false;
+let feedingImageSignature;
 
 function selectTab(name) {
   tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === name));
@@ -70,9 +72,69 @@ function render(state) {
   document.getElementById('pet-scale').value = Math.round(state.petScale * 100);
   document.getElementById('size-value').textContent = Math.round(state.petScale * 100) + '%';
   renderActions(state.customActions);
+  renderFeeding(state.feeding);
 }
 window.yuexin.onState(render);
 window.yuexin.getState().then(render);
+
+function renderFeeding(feeding) {
+  const value = feeding.satiety;
+  document.getElementById('satiety-value').textContent = value + ' / 100';
+  document.getElementById('satiety-fill').style.width = value + '%';
+  const meter = document.getElementById('satiety-meter');
+  meter.setAttribute('aria-valuenow', value);
+  meter.classList.toggle('hungry', value <= 25);
+  document.getElementById('satiety-mood').textContent = feeding.isEating ? '正在认真吃饭，等一小会儿～' : value >= 100 ? '已经饱饱的啦，等肚子空一点再喂吧～' : value <= 25 ? '小肚子有点空了，来点好吃的吧～' : value >= 70 ? '吃得刚刚好，心情也很好～' : '再来一点小鱼干也不错～';
+  const foodList = document.getElementById('food-list');
+  if (!foodList.children.length) feeding.foods.forEach((food) => {
+    const button = document.createElement('button'); button.className = 'food-card'; button.dataset.food = food.id;
+    const icon = document.createElement('span'); icon.className = 'food-icon'; icon.textContent = food.emoji;
+    const name = document.createElement('strong'); name.textContent = food.name;
+    const amount = document.createElement('small'); amount.textContent = '饱腹度 +' + food.amount;
+    button.append(icon, name, amount); button.onclick = () => feed(food.id); foodList.append(button);
+  });
+  [...foodList.children].forEach((button) => { button.disabled = feedPending || feeding.isEating || value >= 100; });
+  const select = document.getElementById('feeding-image-select');
+  const signature = JSON.stringify([feeding.image.url, currentState.customActions.map((entry) => [entry.id, entry.name])]);
+  if (feedingImageSignature !== signature) {
+    feedingImageSignature = signature;
+    const options = [{ value: 'preset', name: '吃冰淇淋（预设）' }];
+    if (!feeding.image.preset) options.push({ value: 'current', name: '当前：' + feeding.image.name });
+    currentState.customActions.forEach((entry) => options.push({ value: entry.id, name: entry.name }));
+    select.replaceChildren(...options.map((entry) => { const option = document.createElement('option'); option.value = entry.value; option.textContent = entry.name; return option; }));
+    select.value = feeding.image.preset ? 'preset' : 'current';
+    document.getElementById('feeding-preview').src = feeding.image.url;
+    document.getElementById('feeding-image-name').textContent = feeding.image.name;
+  }
+  const duration = document.getElementById('feeding-duration');
+  if (document.activeElement !== duration) duration.value = feeding.duration / 1000;
+  for (const id of ['feeding-image-select', 'feeding-import-image', 'feeding-reset-image', 'feeding-duration']) document.getElementById(id).disabled = feeding.isEating;
+}
+
+async function feed(foodId) {
+  const status = document.getElementById('feeding-status');
+  if (feedPending) return;
+  feedPending = true; renderFeeding(currentState.feeding);
+  try {
+    const result = await window.yuexin.feed(foodId);
+    status.textContent = '喂了' + result.food.name + '，饱腹度 +' + result.gained + '，现在是 ' + result.satiety + '/100。';
+  } catch (error) { status.textContent = error.message; }
+  finally { feedPending = false; renderFeeding(currentState.feeding); }
+}
+document.getElementById('feeding-open-settings').onclick = () => { selectTab('settings'); document.getElementById('feeding-image-select').scrollIntoView({ block: 'center', behavior: 'smooth' }); };
+async function changeFeedingImage(action) {
+  const status = document.getElementById('feeding-image-status'); status.textContent = '';
+  try { if (await action() !== false) status.textContent = '吃饭动作已保存，下次喂食时就会播放。'; }
+  catch (error) { status.textContent = error.message; }
+  finally { feedingImageSignature = undefined; renderFeeding(currentState.feeding); }
+}
+document.getElementById('feeding-image-select').onchange = (event) => { if (event.target.value !== 'current') changeFeedingImage(() => window.yuexin.setFeedingImage(event.target.value)); };
+document.getElementById('feeding-import-image').onclick = () => changeFeedingImage(() => window.yuexin.importFeedingImage());
+document.getElementById('feeding-reset-image').onclick = () => changeFeedingImage(() => window.yuexin.setFeedingImage('preset'));
+document.getElementById('feeding-duration').onchange = async (event) => {
+  try { await window.yuexin.setFeedingDuration(Number(event.target.value)); }
+  catch (error) { document.getElementById('feeding-image-status').textContent = error.message; }
+};
 
 const repeat = document.getElementById('reminder-repeat');
 repeat.onchange = () => {

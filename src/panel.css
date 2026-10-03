@@ -105,3 +105,24 @@ input::placeholder { color:#b8a698; }
 .action-buttons .secondary { padding:6px 8px; }
 .remove-action { border:0; background:transparent; color:var(--muted); font-size:18px; }
 .import-card .status { white-space:pre-wrap; }
+.satiety-card { padding:18px; }
+.satiety-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.satiety-heading output { color:#47784a; font-size:23px; font-weight:800; }
+.satiety-meter { height:13px; }
+.satiety-meter span { background:linear-gradient(90deg,#b4d89d,#599253); transition:width .3s; }
+.satiety-meter.hungry span { background:linear-gradient(90deg,#ffc48d,#df9250); }
+.satiety-card .hint { margin-bottom:0; }
+.food-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.food-card { display:flex; flex-direction:column; align-items:center; gap:7px; background:#fff; color:var(--ink); padding:16px 5px; border:1px solid var(--line); border-radius:16px; }
+.food-card:hover { background:#fff1df; border-color:#d6b594; }
+.food-card:active { transform:translateY(2px); }
+.food-card:disabled { opacity:.5; cursor:default; transform:none; }
+.food-card .food-icon { font-size:32px; }
+.food-card small { font-size:10px; color:var(--muted); }
+.feeding-setting { padding:15px; margin-top:12px; }
+.feeding-preview-row { display:flex; align-items:center; gap:12px; margin:12px 0; }
+.feeding-preview-row img { width:86px; height:86px; object-fit:contain; background:#f8f1e8; border-radius:12px; }
+.feeding-preview-row span { flex:1; min-width:0; overflow-wrap:anywhere; font-size:12px; }
+.feeding-setting-controls { display:flex; align-items:center; gap:12px; margin:10px 0 15px; }
+.feeding-setting-controls .text-button { padding:0; font-size:11px; }
+.feeding-duration-label input[type=number] { width:90px; }

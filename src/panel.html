@@ -14,12 +14,26 @@
   </header>
   <nav class="tabs" aria-label="功能">
     <button data-tab="reminders" class="active">⏰ 提醒</button>
+    <button data-tab="feeding">🐟 喂食</button>
     <button data-tab="chat">💬 聊天</button>
     <button data-tab="actions">🐾 动作</button>
     <button data-tab="usage">⚡ 额度</button>
     <button data-tab="settings">⚙ 设置</button>
   </nav>
   <main>
+    <section id="feeding" class="page">
+      <div class="section-title"><div><h2>月薪喵的饭碗</h2><p>挑一点喜欢的食物，陪它好好吃饭。</p></div></div>
+      <div class="card satiety-card">
+        <div class="satiety-heading"><strong>饱腹度</strong><output id="satiety-value">70 / 100</output></div>
+        <div id="satiety-meter" class="meter satiety-meter" role="progressbar" aria-label="饱腹度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70"><span id="satiety-fill"></span></div>
+        <p id="satiety-mood" class="hint"></p>
+      </div>
+      <h3 class="list-heading">今天吃点什么？</h3>
+      <div id="food-list" class="food-grid"></div>
+      <p id="feeding-status" class="status" role="status" aria-live="polite"></p>
+      <p class="hint">每 10 分钟消耗 1 点饱腹度，最低 0、最高 100。关闭程序后也按经过的时间计算，重新打开会恢复当前数值。</p>
+      <button id="feeding-open-settings" class="text-button">更换吃饭图片 / GIF →</button>
+    </section>
     <section id="reminders" class="page active">
       <div class="section-title"><div><h2>提醒事项</h2><p>时间一到，月薪喵会跳起来叫你。</p></div></div>
       <form id="reminder-form" class="card form">
@@ -62,6 +76,14 @@
       <div class="card size-setting"><div class="size-heading"><strong>桌宠大小</strong><output id="size-value" for="pet-scale">100%</output></div><input id="pet-scale" type="range" min="60" max="180" step="5" value="100" aria-label="桌宠大小"><div class="size-labels"><span>小 · 60%</span><button id="reset-size" class="text-button">恢复 100%</button><span>大 · 180%</span></div></div>
       <div class="card setting"><div><strong>待机随机播放动作</strong><small>偶尔播放动作库里的 GIF 和图片</small></div><input id="idle-animations" type="checkbox" checked></div>
       <div class="card setting interval-setting"><div><strong>随机播放间隔</strong><small>播放结束后等待，时间会略有随机变化</small></div><select id="random-interval" aria-label="随机播放间隔"><option value="15">约 15 秒</option><option value="30">约 30 秒</option><option value="60">约 1 分钟</option><option value="120">约 2 分钟</option></select></div>
+      <div class="card feeding-setting">
+        <strong>吃饭图片 / GIF</strong><p class="hint">喂食时播放这张图片，吃完后恢复原来的月薪猫。</p>
+        <div class="feeding-preview-row"><img id="feeding-preview" alt="吃饭动作预览"><span id="feeding-image-name"></span></div>
+        <label>从动作库选择<select id="feeding-image-select" aria-label="吃饭图片"></select></label>
+        <div class="feeding-setting-controls"><button id="feeding-import-image" class="secondary">上传图片 / GIF</button><button id="feeding-reset-image" class="text-button">恢复冰淇淋预设</button></div>
+        <label class="feeding-duration-label">吃饭时长（秒）<input id="feeding-duration" type="number" min="2" max="120" value="5"></label>
+        <p id="feeding-image-status" class="hint" role="status"></p>
+      </div>
       <div class="card info"><strong>互动方法</strong><p>按住月薪喵拖动；轻点会随机播放图片动作。“动作”页可以批量添加图片和 GIF，每个动作都能选择是否参与随机、调整播放时长。关闭面板后桌宠仍会运行。</p></div>
     </section>
   </main>
