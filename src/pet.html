@@ -10,6 +10,15 @@
 <body>
   <div id="stage" class="stage">
     <div id="bubble" class="bubble" role="status"></div>
+    <button id="mood-button" class="mood-button" aria-label="查看心情和亲密度" aria-expanded="false" aria-controls="companion-menu" title="查看心情和亲密度"><span id="mood-emoji">😊</span><small id="mood-number">75</small></button>
+    <div id="companion-menu" class="companion-menu" role="group" aria-label="陪伴月薪喵" hidden>
+      <div class="companion-heading"><strong id="mood-label">😊 开心 · 75</strong><button id="companion-close" aria-label="收起陪伴选项">×</button></div>
+      <div id="mood-meter" class="companion-meter" role="progressbar" aria-label="心情" aria-valuemin="0" aria-valuemax="100" aria-valuenow="75"><span id="mood-fill"></span></div>
+      <div class="bond-heading"><span id="bond-label">初见 · 亲密 0</span><small id="daily-together">今日 0/3</small></div>
+      <div id="bond-meter" class="companion-meter bond-meter" role="progressbar" aria-label="亲密等级进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="bond-fill"></span></div>
+      <div class="companion-buttons"><button id="petting-button">🤲 摸摸</button><button id="play-button">🧶 逗猫</button><button id="sleep-button">💤 睡觉</button></div>
+      <p id="companion-status" role="status" aria-live="polite">头顶来回移动鼠标，也能摸摸～</p>
+    </div>
     <button id="feeding" class="satiety-button" title="饱腹度 70/100 · 点击喂食" aria-label="饱腹度 70/100，点击展开喂食" aria-expanded="false" aria-controls="quick-feed-menu"><span id="satiety-number" class="satiety-number">70</span></button>
     <div id="quick-feed-menu" class="quick-feed-menu" role="group" aria-label="喂食选项" hidden>
       <div class="quick-feed-heading"><strong>喂一点好吃的</strong><button id="quick-feed-close" aria-label="收起喂食选项" title="收起">×</button></div>
@@ -23,7 +32,11 @@
       <img id="phone-image" class="cat phone" src="../assets/yuexin-phone.png" alt="月薪喵摸鱼">
       <img id="custom-animation" class="cat custom-animation" crossorigin="anonymous" alt="我的图片动作" hidden>
       <span id="effect" class="effect"></span>
+      <span id="sleep-effect" class="sleep-effect" aria-hidden="true">Z z z</span>
     </div>
+    <div id="affection-effect" class="affection-effect" aria-hidden="true"><span>♥</span><span>♥</span><span>♥</span></div>
+    <button id="toy" class="toy" aria-label="点击逗猫球" title="点击小球陪月薪喵玩" hidden>🧶</button>
+    <div id="play-hud" class="play-hud" hidden><span id="play-progress">点小球 · 0/3</span><button id="play-cancel" aria-label="结束逗猫">×</button></div>
     <div id="dock" class="dock">
       <button id="reminder" title="提醒事项" aria-label="提醒事项">⏰</button>
       <button id="chat" title="和月薪喵聊天" aria-label="聊天">💬</button>
@@ -34,6 +47,7 @@
   </div>
   <script src="actions.js"></script>
   <script src="action-library.js"></script>
+  <script src="petting-gesture.js"></script>
   <script src="pet.js"></script>
 </body>
 </html>

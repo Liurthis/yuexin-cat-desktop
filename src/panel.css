@@ -126,3 +126,16 @@ input::placeholder { color:#b8a698; }
 .feeding-setting-controls { display:flex; align-items:center; gap:12px; margin:10px 0 15px; }
 .feeding-setting-controls .text-button { padding:0; font-size:11px; }
 .feeding-duration-label input[type=number] { width:90px; }
+.companion-card { padding:18px; margin-top:12px; }
+.companion-card output { color:#b85e79; }
+.mood-meter span { background:linear-gradient(90deg,#efbad0,#cb7894); transition:width .3s; }
+.companion-bond { display:flex; margin:14px 0 7px; font-size:12px; color:#765a3a; }
+.bond-meter span { background:linear-gradient(90deg,#e6c989,#c69546); transition:width .3s; }
+.daily-tasks { display:flex; gap:6px; margin-top:14px; }
+.daily-tasks span { flex:1; padding:7px 2px; border-radius:8px; text-align:center; background:#f4eee7; color:#806655; font-size:12px; }
+.daily-tasks span.done { color:#38663d; background:#e7f0df; }
+.companion-card .hint { margin-bottom:0; }
+.food-card.favorite { border-color:#d4a250; background:#fff8e9; }
+.food-card.favorite strong::after { content:' ★'; color:#af7926; }
+.interaction-setting { padding:15px; margin-top:12px; }
+.interaction-setting label { margin-top:12px; }

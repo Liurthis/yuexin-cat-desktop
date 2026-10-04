@@ -11,6 +11,7 @@ const { imageExtension, normalizeDuration } = require('./action-library');
 const { resolveCodexPath } = require('./codex-path');
 const { seedBundledActions } = require('./bundled-actions');
 const { FOODS, normalizeFeeding, advanceSatiety, feedPet } = require('./feeding');
+const { normalizeCompanion, advanceCompanion, companionView, interactCompanion, setSleeping } = require('./companion');
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'yuexin-asset', privileges: { standard: true, secure: true, corsEnabled: true, supportFetchAPI: true } }]);
 
@@ -27,6 +28,7 @@ let ignoringMouse = true;
 let petDragging = false;
 let feedingBusy = false;
 let feedingEndTimer;
+let playSession = null;
 const startupName = '月薪喵桌宠';
 
 function loginOptions() {
@@ -66,9 +68,10 @@ function loadState() {
       codexPath: typeof loaded.codexPath === 'string' ? loaded.codexPath : null,
       customActions: Array.isArray(loaded.customActions) ? loaded.customActions.filter(validCustomAction).map((entry) => ({ ...entry, random: entry.random !== false })) : [],
       feeding: normalizeFeeding({ ...loaded.feeding, image: validCustomAction(loaded.feeding?.image) ? loaded.feeding.image : null }),
+      companion: normalizeCompanion(loaded.companion),
     };
   } catch {
-    return { reminders: [], petPosition: null, alwaysOnTop: true, petScale: 1, idleAnimations: true, randomInterval: 30, bundledActionsVersion: 0, codexPath: null, customActions: [], feeding: normalizeFeeding() };
+    return { reminders: [], petPosition: null, alwaysOnTop: true, petScale: 1, idleAnimations: true, randomInterval: 30, bundledActionsVersion: 0, codexPath: null, customActions: [], feeding: normalizeFeeding(), companion: normalizeCompanion() };
   }
 }
 
@@ -80,7 +83,7 @@ function saveState() {
 }
 
 function publicState() {
-  return { reminders: state.reminders, alwaysOnTop: state.alwaysOnTop, autoStart: getAutoStart(), petScale: state.petScale, idleAnimations: state.idleAnimations, randomInterval: state.randomInterval, customActions: state.customActions, feeding: { satiety: state.feeding.satiety, isEating: feedingBusy, foods: FOODS, image: feedingImage(), duration: state.feeding.duration }, limits };
+  return { reminders: state.reminders, alwaysOnTop: state.alwaysOnTop, autoStart: getAutoStart(), petScale: state.petScale, idleAnimations: state.idleAnimations, randomInterval: state.randomInterval, customActions: state.customActions, feeding: { satiety: state.feeding.satiety, isEating: feedingBusy, foods: FOODS, image: feedingImage(), duration: state.feeding.duration }, companion: companionView(state.companion), limits };
 }
 
 function feedingImage() {
@@ -97,7 +100,20 @@ function finishFeeding() {
 }
 
 function refreshSatiety() {
-  if (advanceSatiety(state.feeding)) { saveState(); broadcastState(); }
+  const feedingChanged = advanceSatiety(state.feeding);
+  const companionChanged = advanceCompanion(state.companion, state.feeding.satiety);
+  if (feedingChanged || companionChanged) { saveState(); broadcastState(); }
+}
+
+function notifyInteraction(result) {
+  saveState(); broadcastState();
+  petWindow?.webContents.send('pet:interaction', result);
+  return result;
+}
+
+function showCompanion() {
+  petWindow?.show();
+  petWindow?.webContents.send('companion:openMenu');
 }
 
 function storeFeedingImage(source, name) {
@@ -224,6 +240,7 @@ function createPet() {
       { label: '打开小窝', click: () => showPanel() },
       { label: '添加提醒', click: () => showPanel('reminders') },
       { label: '喂月薪喵吃东西', click: showQuickFeeding },
+      { label: '摸摸 / 逗猫 / 睡觉', click: showCompanion },
       { label: '选择 / 添加动作', click: () => showPanel('actions') },
       { label: '调整大小', click: () => showPanel('settings') },
       { label: '查看 GPT 额度', click: () => showPanel('usage') },
@@ -248,6 +265,7 @@ function createTray() {
     { label: '打开小窝', click: () => showPanel() },
     { label: '显示月薪喵', click: () => petWindow?.show() },
     { label: '喂月薪喵', click: showQuickFeeding },
+    { label: '陪月薪喵玩', click: showCompanion },
     { label: '查看 GPT 额度', click: () => showPanel('usage') },
     { type: 'separator' },
     { label: '退出', click: () => app.quit() },
@@ -256,6 +274,7 @@ function createTray() {
 }
 
 function fireReminder(reminder) {
+  playSession = null;
   const notification = new Notification({
     title: '月薪喵提醒你', body: reminder.title,
     icon: path.join(__dirname, '..', 'assets', 'yuexin-idle.png'),
@@ -281,16 +300,64 @@ function checkReminders() {
 
 function registerIpc() {
   ipcMain.handle('state:get', () => { refreshSatiety(); return publicState(); });
+  const fromPet = (event) => { if (event.sender !== petWindow?.webContents) throw new Error('请从桌宠发起互动'); };
+  ipcMain.handle('companion:pet', (event) => {
+    fromPet(event);
+    if (playSession && Date.now() > playSession.expiresAt) playSession = null;
+    if (feedingBusy || playSession) throw new Error('等吃完或玩完，再来摸摸吧～');
+    refreshSatiety();
+    return notifyInteraction(interactCompanion(state.companion, 'petting', state.feeding.satiety));
+  });
+  ipcMain.handle('companion:sleep', (event, sleeping) => {
+    fromPet(event);
+    if (feedingBusy) throw new Error('先吃完再休息吧～');
+    refreshSatiety();
+    playSession = null;
+    setSleeping(state.companion, sleeping, state.feeding.satiety);
+    saveState(); broadcastState();
+  });
+  ipcMain.handle('companion:animation', (event, kind, actionId) => {
+    if (event.sender !== panelWindow?.webContents) throw new Error('请在设置里更换互动 GIF');
+    if (!['petting', 'play', 'sleep'].includes(kind)) throw new Error('请选择互动类型');
+    if (!['auto', 'original'].includes(actionId) && !state.customActions.some((entry) => entry.id === actionId)) throw new Error('这个动作不存在，请重新选择');
+    state.companion.animations[kind] = actionId;
+    saveState(); broadcastState();
+  });
+  ipcMain.handle('companion:playStart', (event) => {
+    fromPet(event); refreshSatiety();
+    if (feedingBusy || state.companion.sleeping) throw new Error('等吃完、睡醒后再一起玩吧～');
+    const now = Date.now();
+    if (companionView(state.companion).cooldownUntil.play > now) throw new Error('刚玩过啦，休息一会儿再玩～');
+    if (playSession && now < playSession.expiresAt) throw new Error('小球已经准备好啦');
+    playSession = { token: crypto.randomUUID(), startedAt: now, expiresAt: now + 15000, hits: 0, lastHit: 0 };
+    return { token: playSession.token, duration: 12000 };
+  });
+  ipcMain.handle('companion:playHit', (event, token) => {
+    fromPet(event);
+    const now = Date.now();
+    if (!playSession || playSession.token !== token || now > playSession.expiresAt) { playSession = null; throw new Error('这局结束啦，再点逗猫试试～'); }
+    if (now - playSession.lastHit < 250) return { hits: playSession.hits, finished: false };
+    playSession.lastHit = now;
+    playSession.hits += 1;
+    if (playSession.hits < 3) return { hits: playSession.hits, finished: false };
+    playSession = null;
+    return { hits: 3, finished: true, result: notifyInteraction(interactCompanion(state.companion, 'play', state.feeding.satiety, now)) };
+  });
+  ipcMain.on('companion:playCancel', (event, token) => { if (event.sender === petWindow?.webContents && playSession?.token === token) playSession = null; });
   ipcMain.handle('feeding:feed', (event, foodId) => {
     if (event.sender !== panelWindow?.webContents && event.sender !== petWindow?.webContents) throw new Error('请从桌宠的喂食选项选择食物');
     if (feedingBusy) throw new Error('还在吃呢，等吃完再喂吧～');
     if (!petWindow || petWindow.isDestroyed()) throw new Error('桌宠还没有准备好');
+    refreshSatiety();
+    const previousSatiety = state.feeding.satiety;
     const result = feedPet(state.feeding, foodId);
+    result.companion = interactCompanion(state.companion, 'feed', previousSatiety, Date.now(), foodId);
+    playSession = null;
     saveState();
     feedingBusy = true;
     broadcastState();
     petWindow.show();
-    petWindow.webContents.send('pet:feed', { ...feedingImage(), duration: state.feeding.duration });
+    petWindow.webContents.send('pet:feed', { ...feedingImage(), duration: state.feeding.duration, result: result.companion });
     feedingEndTimer = setTimeout(finishFeeding, state.feeding.duration + 10000);
     return result;
   });
@@ -474,6 +541,7 @@ app.whenReady().then(() => {
   state = loadState();
   if (seedBundledActions(state, path.join(__dirname, '..', 'assets', 'actions'), path.join(app.getPath('userData'), 'action-assets'))) saveState();
   advanceSatiety(state.feeding);
+  advanceCompanion(state.companion, state.feeding.satiety);
   saveState();
   if (process.argv.includes('--enable-autostart')) setAutoStart(true);
   if (process.argv.includes('--disable-autostart')) setAutoStart(false);

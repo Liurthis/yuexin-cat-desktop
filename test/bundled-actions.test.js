@@ -19,11 +19,16 @@ test('bundled GIFs keep their bytes and existing settings, and deleted actions s
     assert.equal(existing.random, false);
     for (const entry of manifest.actions) {
       const filename = `${entry.id}.${entry.extension}`;
-      assert.deepEqual(fs.readFileSync(path.join(folder, filename)), fs.readFileSync(path.join(source, filename)));
+      assert.deepEqual(fs.readFileSync(path.join(folder, filename)), fs.readFileSync(path.join(source, entry.sourceFile || filename)));
     }
     state.customActions.pop();
     assert.equal(seedBundledActions(state, source, folder), false);
     assert.equal(state.customActions.length, 7);
+    const missing = `${manifest.actions[0].id}.${manifest.actions[0].extension}`;
+    fs.unlinkSync(path.join(folder, missing));
+    assert.equal(seedBundledActions(state, source, folder), true, 'missing files still referenced by the library are repaired');
+    assert.deepEqual(fs.readFileSync(path.join(folder, missing)), fs.readFileSync(path.join(source, manifest.actions[0].sourceFile || missing)));
+    assert.equal(state.customActions.length, 7, 'repair does not restore deleted action entries');
     const fresh = { customActions: [], bundledActionsVersion: 0 };
     assert.equal(seedBundledActions(fresh, source, folder), true);
     assert.deepEqual(fresh.customActions, manifest.actions);

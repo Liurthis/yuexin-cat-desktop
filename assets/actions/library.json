@@ -3,8 +3,9 @@
   "actions": [
     {
       "id": "9e1049df-cbf2-4eae-a93e-180cf5766f2b",
+      "sourceFile": "困困.gif",
       "extension": "gif",
-      "name": "13435385834416837",
+      "name": "困困",
       "duration": 5000,
       "random": true
     },
@@ -17,27 +18,31 @@
     },
     {
       "id": "8ae79b72-ae5c-4a0d-8001-a13e0c29dbcb",
+      "sourceFile": "eatting icecream.gif",
       "extension": "gif",
-      "name": "13435385859796329",
+      "name": "吃冰淇淋",
       "duration": 5000,
       "random": true
     },
     {
       "id": "fb722314-63b0-4c98-852c-33ce30817f1c",
+      "sourceFile": "你好.gif",
       "extension": "gif",
-      "name": "13435386663193695",
+      "name": "你好",
       "duration": 2000,
       "random": true
     },
     {
       "id": "515e41dd-822d-490b-bcc9-d48c3e30bd59",
+      "sourceFile": "对的对的.gif",
       "extension": "gif",
-      "name": "13435386717229440",
+      "name": "对的对的",
       "duration": 5000,
       "random": true
     },
     {
       "id": "3d1d3784-0ff6-4d38-92c4-0394097a95cc",
+      "sourceFile": "love.gif",
       "extension": "gif",
       "name": "爱你",
       "duration": 5000,
@@ -45,6 +50,7 @@
     },
     {
       "id": "9a20d58e-7ff9-405c-ac01-6dc2d4c1a9ac",
+      "sourceFile": "eatting.gif",
       "extension": "gif",
       "name": "吃饭啦",
       "duration": 5000,
@@ -52,6 +58,7 @@
     },
     {
       "id": "8065def2-4e39-4a21-b417-1f1dffdb8faa",
+      "sourceFile": "喜欢.gif",
       "extension": "gif",
       "name": "喜欢",
       "duration": 5000,

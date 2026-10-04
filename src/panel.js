@@ -6,6 +6,7 @@ const limitStatus = document.getElementById('limit-status');
 let currentState;
 let feedPending = false;
 let feedingImageSignature;
+let interactionImageSignature;
 
 function selectTab(name) {
   tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === name));
@@ -73,6 +74,7 @@ function render(state) {
   document.getElementById('size-value').textContent = Math.round(state.petScale * 100) + '%';
   renderActions(state.customActions);
   renderFeeding(state.feeding);
+  renderCompanion(state.companion);
 }
 window.yuexin.onState(render);
 window.yuexin.getState().then(render);
@@ -93,7 +95,11 @@ function renderFeeding(feeding) {
     const amount = document.createElement('small'); amount.textContent = '饱腹度 +' + food.amount;
     button.append(icon, name, amount); button.onclick = () => feed(food.id); foodList.append(button);
   });
-  [...foodList.children].forEach((button) => { button.disabled = feedPending || feeding.isEating || value >= 100; });
+  [...foodList.children].forEach((button) => {
+    button.disabled = feedPending || feeding.isEating || value >= 100;
+    button.classList.toggle('favorite', button.dataset.food === currentState.companion?.favoriteFood);
+    button.title = '心情 +' + ((button.dataset.food === 'snack' ? 7 : 4) + (button.dataset.food === currentState.companion?.favoriteFood ? 3 : 0));
+  });
   const select = document.getElementById('feeding-image-select');
   const signature = JSON.stringify([feeding.image.url, currentState.customActions.map((entry) => [entry.id, entry.name])]);
   if (feedingImageSignature !== signature) {
@@ -111,13 +117,51 @@ function renderFeeding(feeding) {
   for (const id of ['feeding-image-select', 'feeding-import-image', 'feeding-reset-image', 'feeding-duration']) document.getElementById(id).disabled = feeding.isEating;
 }
 
+function renderCompanion(companion) {
+  if (!companion) return;
+  document.getElementById('panel-mood-name').textContent = companion.emotion.emoji + ' ' + companion.emotion.name;
+  document.getElementById('panel-mood-value').textContent = companion.mood + ' / 100';
+  document.getElementById('panel-mood-fill').style.width = companion.mood + '%';
+  document.getElementById('panel-mood-meter').setAttribute('aria-valuenow', companion.mood);
+  document.getElementById('panel-bond').textContent = companion.level.name + ' · 亲密度 ' + companion.bond + (companion.level.next ? ' · 距离「' + companion.level.next + '」还差 ' + companion.level.remaining : ' · 已经是家人啦');
+  document.getElementById('panel-bond-fill').style.width = companion.level.progress + '%';
+  document.getElementById('panel-bond-meter').setAttribute('aria-valuenow', companion.level.progress);
+  const tasks = document.getElementById('daily-tasks');
+  tasks.replaceChildren(...[['feed', '🐟 喂食'], ['petting', '🤲 摸摸'], ['play', '🧶 逗猫']].map(([key, label]) => {
+    const item = document.createElement('span'); item.className = companion.daily[key] ? 'done' : ''; item.textContent = label + (companion.daily[key] ? ' ✓' : ''); return item;
+  }));
+  const food = currentState.feeding.foods.find((entry) => entry.id === companion.favoriteFood);
+  document.getElementById('panel-companion-hint').textContent = '一起度过 ' + companion.daysTogether + ' 天 · 今天最爱' + food.name + '（心情额外 +3）。集齐三种陪伴奖励心情 +5、亲密度 +5；每天最多增加 30 亲密度，离线不会减少。';
+  const signature = JSON.stringify([companion.animations, currentState.customActions.map((entry) => [entry.id, entry.name])]);
+  if (signature !== interactionImageSignature) {
+    interactionImageSignature = signature;
+    for (const kind of ['petting', 'play', 'sleep']) {
+      const select = document.getElementById(kind + '-animation');
+      const options = [{ id: 'auto', name: '自动选择合适的 GIF' }, { id: 'original', name: '原图回应（轻动画）' }, ...currentState.customActions];
+      const selected = companion.animations[kind];
+      if (!options.some((entry) => entry.id === selected)) options.push({ id: selected, name: '动作已移除（自动使用预设）' });
+      select.replaceChildren(...options.map((entry) => { const option = document.createElement('option'); option.value = entry.id; option.textContent = entry.name; return option; }));
+      select.value = selected;
+    }
+  }
+}
+for (const kind of ['petting', 'play', 'sleep']) {
+  document.getElementById(kind + '-animation').onchange = async (event) => {
+    const status = document.getElementById('interaction-image-status');
+    event.target.disabled = true;
+    try { await window.yuexin.setInteractionAnimation(kind, event.target.value); status.textContent = '陪伴动作已保存。'; }
+    catch (error) { status.textContent = error.message; interactionImageSignature = undefined; renderCompanion(currentState.companion); }
+    finally { event.target.disabled = false; }
+  };
+}
+
 async function feed(foodId) {
   const status = document.getElementById('feeding-status');
   if (feedPending) return;
   feedPending = true; renderFeeding(currentState.feeding);
   try {
     const result = await window.yuexin.feed(foodId);
-    status.textContent = '喂了' + result.food.name + '，饱腹度 +' + result.gained + '，现在是 ' + result.satiety + '/100。';
+    status.textContent = '喂了' + result.food.name + '，饱腹度 +' + result.gained + '，心情 +' + result.companion.moodGained + (result.companion.favorite ? '（今天最爱！）' : '') + '。';
   } catch (error) { status.textContent = error.message; }
   finally { feedPending = false; renderFeeding(currentState.feeding); }
 }

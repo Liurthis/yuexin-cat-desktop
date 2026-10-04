@@ -28,6 +28,14 @@
         <div id="satiety-meter" class="meter satiety-meter" role="progressbar" aria-label="饱腹度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70"><span id="satiety-fill"></span></div>
         <p id="satiety-mood" class="hint"></p>
       </div>
+      <div class="card companion-card">
+        <div class="satiety-heading"><strong id="panel-mood-name">😊 开心</strong><output id="panel-mood-value">75 / 100</output></div>
+        <div id="panel-mood-meter" class="meter mood-meter" role="progressbar" aria-label="心情值" aria-valuemin="0" aria-valuemax="100" aria-valuenow="75"><span id="panel-mood-fill"></span></div>
+        <p id="panel-bond" class="companion-bond"></p>
+        <div id="panel-bond-meter" class="meter bond-meter" role="progressbar" aria-label="亲密等级进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="panel-bond-fill"></span></div>
+        <div id="daily-tasks" class="daily-tasks" aria-label="今日陪伴"></div>
+        <p id="panel-companion-hint" class="hint"></p>
+      </div>
       <h3 class="list-heading">今天吃点什么？</h3>
       <div id="food-list" class="food-grid"></div>
       <p id="feeding-status" class="status" role="status" aria-live="polite"></p>
@@ -84,7 +92,14 @@
         <label class="feeding-duration-label">吃饭时长（秒）<input id="feeding-duration" type="number" min="2" max="120" value="5"></label>
         <p id="feeding-image-status" class="hint" role="status"></p>
       </div>
-      <div class="card info"><strong>互动方法</strong><p>按住月薪喵拖动；轻点会随机播放图片动作。“动作”页可以批量添加图片和 GIF，每个动作都能选择是否参与随机、调整播放时长。关闭面板后桌宠仍会运行。</p></div>
+      <div class="card interaction-setting">
+        <strong>陪伴动作 / GIF</strong><p class="hint">先在“动作”页导入喜欢的 GIF，再在这里指定。自动选择会优先使用「爱你」和「喜欢」；原图回应保留圆润形象。</p>
+        <label>摸摸时<select id="petting-animation" aria-label="摸摸回应动作"></select></label>
+        <label>逗猫成功时<select id="play-animation" aria-label="逗猫回应动作"></select></label>
+        <label>睡觉时<select id="sleep-animation" aria-label="睡觉动作"></select></label>
+        <p id="interaction-image-status" class="hint" role="status"></p>
+      </div>
+      <div class="card info"><strong>互动方法</strong><p>按住月薪喵拖动，轻点随机播放 GIF。在头顶来回移动鼠标可以摸摸；右侧饱腹度下方的心情小圆可查看亲密度、摸摸、逗猫或睡觉。逗猫时点到小球三次就成功；Esc 可退出。轻点睡着的猫可以叫醒它，提醒也照常响起。“动作”页可以批量添加图片和 GIF。</p></div>
     </section>
   </main>
   <script src="actions.js"></script>
