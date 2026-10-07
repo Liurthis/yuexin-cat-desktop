@@ -27,6 +27,15 @@
       <button id="quick-feed-can" class="quick-food"><span>🥫 猫罐头</span><small>+35</small></button>
       <p id="quick-feed-status" role="status" aria-live="polite">选一点喜欢的食物。</p>
     </div>
+    <button id="focus-button" class="focus-button" aria-label="一起专注" aria-expanded="false" aria-controls="focus-menu" title="一起专注"><span>⏱</span><small id="focus-number">专注</small></button>
+    <div id="focus-menu" class="focus-menu" role="group" aria-label="一起专注" hidden>
+      <div class="companion-heading"><strong id="focus-heading">一起专注</strong><button id="focus-close" aria-label="收起专注选项">×</button></div>
+      <div id="focus-countdown" class="focus-countdown" role="timer" aria-live="off">25:00</div>
+      <select id="quick-focus-minutes" aria-label="专注时长"><option value="25">专注 25 分钟</option><option value="45">专注 45 分钟</option><option value="60">专注 60 分钟</option></select>
+      <div class="focus-controls"><button id="quick-focus-main">开始专注</button><button id="quick-focus-end" hidden>结束</button></div>
+      <p id="quick-focus-status" role="status">安静陪你，结束后提醒休息。</p>
+      <div class="focus-links"><button id="focus-settings">调整时长</button><button id="open-journal">陪伴日记</button></div>
+    </div>
     <div id="pet" class="pet" aria-label="月薪喵，拖动或点击随机播放动作">
       <img id="idle-image" class="cat idle" src="../assets/yuexin-idle.png" alt="月薪喵">
       <img id="phone-image" class="cat phone" src="../assets/yuexin-phone.png" alt="月薪喵摸鱼">
@@ -47,6 +56,7 @@
   </div>
   <script src="actions.js"></script>
   <script src="action-library.js"></script>
+  <script src="action-context.js"></script>
   <script src="petting-gesture.js"></script>
   <script src="pet.js"></script>
 </body>

@@ -15,12 +15,37 @@
   <nav class="tabs" aria-label="功能">
     <button data-tab="reminders" class="active">⏰ 提醒</button>
     <button data-tab="feeding">🐟 喂食</button>
+    <button data-tab="focus">⌛ 专注</button>
+    <button data-tab="journal">📖 日记</button>
     <button data-tab="chat">💬 聊天</button>
     <button data-tab="actions">🐾 动作</button>
     <button data-tab="usage">⚡ 额度</button>
     <button data-tab="settings">⚙ 设置</button>
   </nav>
   <main>
+    <section id="focus" class="page">
+      <div class="section-title"><div><h2>一起专注</h2><p>安静陪你做一件事，结束后提醒你休息。</p></div></div>
+      <div class="card focus-card">
+        <strong id="panel-focus-heading">准备开始</strong>
+        <div id="panel-focus-countdown" role="timer" aria-live="off">25:00</div>
+        <div id="panel-focus-meter" class="meter" role="progressbar" aria-label="当前计时进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="panel-focus-fill"></span></div>
+        <div class="focus-controls"><button id="panel-focus-main" class="primary">开始专注</button><button id="panel-focus-end" class="secondary" hidden>结束</button></div>
+        <p id="panel-focus-status" class="hint" role="status"></p>
+      </div>
+      <form id="focus-settings-form" class="card form focus-settings">
+        <div class="focus-inputs"><label>专注时长（分钟）<input id="focus-minutes" type="number" min="1" max="180" required value="25"></label><label>休息时长（分钟）<input id="focus-break-minutes" type="number" min="1" max="30" required value="5"></label></div>
+        <button class="secondary" type="submit">保存时长</button><p id="focus-settings-status" class="hint" role="status"></p>
+      </form>
+      <p class="hint">专注期间暂停待机随机动作，手动摸摸和喂食仍可使用。完成一段专注增加 3 心情和 2 亲密度，计入每日亲密度上限；提前结束不计入日记。锁屏、休眠或退出时暂停，回来后点“继续”。</p>
+      <button id="focus-open-journal" class="text-button">看看我们的陪伴日记 →</button>
+    </section>
+    <section id="journal" class="page">
+      <div class="section-title"><div><h2>陪伴日记</h2><p>把一起度过的小事，慢慢收集起来。</p></div><button id="export-journal" class="secondary">导出</button></div>
+      <div id="journal-totals" class="journal-totals"></div>
+      <h3 class="list-heading">我们的纪念章</h3><div id="journal-badges" class="badge-grid"></div>
+      <h3 class="list-heading">猫咪记得的日常</h3><div id="journal-days" class="list"></div>
+      <p id="journal-status" class="hint" role="status">从这个版本开始记录，保留最近 90 个有互动的日期，每天最近 40 条小事；累计次数和纪念章一直保留。全部保存在本机，不消耗 GPT 额度。</p>
+    </section>
     <section id="feeding" class="page">
       <div class="section-title"><div><h2>月薪喵的饭碗</h2><p>挑一点喜欢的食物，陪它好好吃饭。</p></div></div>
       <div class="card satiety-card">
@@ -70,9 +95,10 @@
       <div class="card info"><strong>额度说明</strong><p>这里显示 Codex / Work 的使用窗口，剩余百分比由官方已用百分比计算。Chat 聊天消息额度是另一项，需在 ChatGPT 的设置中查看。</p><button id="open-chatgpt" class="text-button">打开 ChatGPT ↗</button></div>
     </section>
     <section id="actions" class="page">
-      <div class="section-title"><div><h2>我的图片动作</h2><p>待机时偶尔随机播放，结束后恢复原来的月薪猫。</p></div></div>
+      <div class="section-title"><div><h2>我的图片动作</h2><p>给 GIF 勾选用途，让月薪喵随状态选择动作。</p></div></div>
       <div class="card info import-card"><strong>添加更多月薪猫动作</strong><p>支持批量导入 GIF、动态 WebP、APNG 和普通图片。导入后默认参与随机播放，轻点桌宠也会随机选一个。</p><div class="import-row"><label>播放秒数<input id="action-duration" type="number" min="2" max="120" value="5"></label><button id="import-action" class="primary">添加图片 / GIF</button></div><p id="action-status" class="status" role="status"></p></div>
       <p id="random-action-count" class="hint"></p>
+      <p class="hint">展开每个动作的“用途”来选择日常、开心、肚子饿、困困、打招呼、专注或庆祝，可多选。自动播放只使用“参与随机”的动作；没有匹配动作时回到日常或现有动作。专注 GIF 会持续循环，直到暂停或结束。</p>
       <div id="custom-action-list" class="list"></div>
       <h3 class="list-heading">默认互动</h3><div id="action-list" class="action-grid"></div>
     </section>
@@ -103,6 +129,7 @@
     </section>
   </main>
   <script src="actions.js"></script>
+  <script src="action-context.js"></script>
   <script src="panel.js"></script>
 </body>
 </html>

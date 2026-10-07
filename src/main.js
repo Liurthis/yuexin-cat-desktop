@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, screen, shell, dialog, protocol, net } = require('electron');
+const { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, screen, shell, dialog, protocol, net, powerMonitor } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -6,12 +6,15 @@ const { pathToFileURL } = require('node:url');
 const { nextDailyTime, advanceDaily } = require('./core');
 const { CodexClient } = require('./codex-client');
 const actions = require('./actions');
-const { normalizeScale, petBounds, validCustomAction } = require('./pet-settings');
+const { normalizeScale, petBounds, validCustomAction, normalizePetPosition } = require('./pet-settings');
 const { imageExtension, normalizeDuration } = require('./action-library');
 const { resolveCodexPath } = require('./codex-path');
 const { seedBundledActions } = require('./bundled-actions');
 const { FOODS, normalizeFeeding, advanceSatiety, feedPet } = require('./feeding');
-const { normalizeCompanion, advanceCompanion, companionView, interactCompanion, setSleeping } = require('./companion');
+const { normalizeCompanion, advanceCompanion, companionView, interactCompanion, setSleeping, rewardFocus } = require('./companion');
+const { normalizeFocus, startFocus, tickFocus, toggleFocus, focusView } = require('./focus');
+const { normalizeJournal, recordJournal, journalView, journalText } = require('./journal');
+const { normalizeTags } = require('./action-context');
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'yuexin-asset', privileges: { standard: true, secure: true, corsEnabled: true, supportFetchAPI: true } }]);
 
@@ -29,6 +32,7 @@ let petDragging = false;
 let feedingBusy = false;
 let feedingEndTimer;
 let playSession = null;
+let lastFocusSave = 0;
 const startupName = '月薪喵桌宠';
 
 function loginOptions() {
@@ -66,12 +70,13 @@ function loadState() {
       randomInterval: Math.max(10, Math.min(180, Number(loaded.randomInterval) || 30)),
       bundledActionsVersion: Number(loaded.bundledActionsVersion) || 0,
       codexPath: typeof loaded.codexPath === 'string' ? loaded.codexPath : null,
-      customActions: Array.isArray(loaded.customActions) ? loaded.customActions.filter(validCustomAction).map((entry) => ({ ...entry, random: entry.random !== false })) : [],
+      customActions: Array.isArray(loaded.customActions) ? loaded.customActions.filter(validCustomAction).map((entry) => ({ ...entry, random: entry.random !== false, tags: normalizeTags(entry) })) : [],
       feeding: normalizeFeeding({ ...loaded.feeding, image: validCustomAction(loaded.feeding?.image) ? loaded.feeding.image : null }),
       companion: normalizeCompanion(loaded.companion),
+      focus: normalizeFocus(loaded.focus), journal: normalizeJournal(loaded.journal),
     };
   } catch {
-    return { reminders: [], petPosition: null, alwaysOnTop: true, petScale: 1, idleAnimations: true, randomInterval: 30, bundledActionsVersion: 0, codexPath: null, customActions: [], feeding: normalizeFeeding(), companion: normalizeCompanion() };
+    return { reminders: [], petPosition: null, alwaysOnTop: true, petScale: 1, idleAnimations: true, randomInterval: 30, bundledActionsVersion: 0, codexPath: null, customActions: [], feeding: normalizeFeeding(), companion: normalizeCompanion(), focus: normalizeFocus(), journal: normalizeJournal() };
   }
 }
 
@@ -83,7 +88,7 @@ function saveState() {
 }
 
 function publicState() {
-  return { reminders: state.reminders, alwaysOnTop: state.alwaysOnTop, autoStart: getAutoStart(), petScale: state.petScale, idleAnimations: state.idleAnimations, randomInterval: state.randomInterval, customActions: state.customActions, feeding: { satiety: state.feeding.satiety, isEating: feedingBusy, foods: FOODS, image: feedingImage(), duration: state.feeding.duration }, companion: companionView(state.companion), limits };
+  return { reminders: state.reminders, alwaysOnTop: state.alwaysOnTop, autoStart: getAutoStart(), petScale: state.petScale, idleAnimations: state.idleAnimations, randomInterval: state.randomInterval, customActions: state.customActions, feeding: { satiety: state.feeding.satiety, isEating: feedingBusy, foods: FOODS, image: feedingImage(), duration: state.feeding.duration }, companion: companionView(state.companion), focus: focusView(state.focus), journal: journalView(state.journal), limits };
 }
 
 function feedingImage() {
@@ -106,9 +111,38 @@ function refreshSatiety() {
 }
 
 function notifyInteraction(result) {
+  recordJournal(state.journal, result.type, result, state.companion);
   saveState(); broadcastState();
   petWindow?.webContents.send('pet:interaction', result);
   return result;
+}
+
+function refreshFocus() {
+  const now = Date.now();
+  const result = tickFocus(state.focus, now);
+  if (!result.changed) return;
+  if (result.event) {
+    const event = result.event;
+    if (event.kind === 'focus') {
+      event.reward = rewardFocus(state.companion, state.feeding.satiety, now);
+      recordJournal(state.journal, 'focus', event, state.companion, now);
+    }
+    saveState(); lastFocusSave = now; broadcastState();
+    petWindow?.webContents.send('focus:finished', event);
+    const notification = new Notification({ title: '月薪喵陪你专注', body: event.kind === 'focus' ? `完成 ${event.minutes} 分钟专注，休息 ${event.breakMinutes} 分钟吧～` : '休息结束啦，准备好了再开始下一段吧～', icon: path.join(__dirname, '..', 'assets', 'yuexin-idle.png') });
+    notification.on('click', showQuickFocus); notification.show();
+  } else {
+    if (now - lastFocusSave >= 15000) { saveState(); lastFocusSave = now; }
+    for (const win of [petWindow, panelWindow]) if (win && !win.isDestroyed()) win.webContents.send('focus:changed', focusView(state.focus, now));
+  }
+}
+function pauseFocusForSystem() {
+  if (!state || state.focus.session?.status !== 'running') return;
+  refreshFocus();
+  if (state.focus.session?.status === 'running') { toggleFocus(state.focus); saveState(); broadcastState(); }
+}
+function showQuickFocus() {
+  petWindow?.show(); petWindow?.webContents.send('focus:openMenu');
 }
 
 function showCompanion() {
@@ -234,13 +268,15 @@ function createPet() {
     }).catch(() => setPetInteractive(false)).finally(() => { samplingPixel = false; });
   }, 50);
   petWindow.loadFile(path.join(__dirname, 'pet.html'));
-  petWindow.webContents.once('did-finish-load', () => broadcastState());
+  petWindow.webContents.once('did-finish-load', () => { broadcastState(); petWindow.webContents.send('pet:greeting'); });
   petWindow.webContents.on('context-menu', () => {
     Menu.buildFromTemplate([
       { label: '打开小窝', click: () => showPanel() },
       { label: '添加提醒', click: () => showPanel('reminders') },
       { label: '喂月薪喵吃东西', click: showQuickFeeding },
       { label: '摸摸 / 逗猫 / 睡觉', click: showCompanion },
+      { label: '一起专注', click: showQuickFocus },
+      { label: '陪伴日记', click: () => showPanel('journal') },
       { label: '选择 / 添加动作', click: () => showPanel('actions') },
       { label: '调整大小', click: () => showPanel('settings') },
       { label: '查看 GPT 额度', click: () => showPanel('usage') },
@@ -248,13 +284,19 @@ function createPet() {
       { label: '退出月薪喵', click: () => app.quit() },
     ]).popup({ window: petWindow });
   });
-  petWindow.on('moved', () => {
+  let positionSaveTimer;
+  petWindow.on('move', () => {
     if (!petWindow || petWindow.isDestroyed()) return;
     const [x, y] = petWindow.getPosition();
     state.petPosition = { x, y };
-    saveState();
+    clearTimeout(positionSaveTimer);
+    positionSaveTimer = setTimeout(() => { positionSaveTimer = null; saveState(); }, 250);
   });
-  petWindow.on('closed', () => { clearInterval(pointerTimer); petWindow = null; });
+  petWindow.on('closed', () => {
+    clearInterval(pointerTimer);
+    if (positionSaveTimer) { clearTimeout(positionSaveTimer); saveState(); }
+    petWindow = null;
+  });
 }
 
 function createTray() {
@@ -266,6 +308,8 @@ function createTray() {
     { label: '显示月薪喵', click: () => petWindow?.show() },
     { label: '喂月薪喵', click: showQuickFeeding },
     { label: '陪月薪喵玩', click: showCompanion },
+    { label: '一起专注', click: showQuickFocus },
+    { label: '陪伴日记', click: () => showPanel('journal') },
     { label: '查看 GPT 额度', click: () => showPanel('usage') },
     { type: 'separator' },
     { label: '退出', click: () => app.quit() },
@@ -299,8 +343,30 @@ function checkReminders() {
 }
 
 function registerIpc() {
-  ipcMain.handle('state:get', () => { refreshSatiety(); return publicState(); });
+  ipcMain.handle('state:get', () => { refreshSatiety(); refreshFocus(); return publicState(); });
   const fromPet = (event) => { if (event.sender !== petWindow?.webContents) throw new Error('请从桌宠发起互动'); };
+  const fromApp = (event) => { if (event.sender !== petWindow?.webContents && event.sender !== panelWindow?.webContents) throw new Error('请从月薪喵的界面操作'); };
+  ipcMain.handle('focus:start', (event, input) => {
+    fromApp(event); refreshFocus();
+    startFocus(state.focus, input, Date.now(), crypto.randomUUID());
+    playSession = null; saveState(); lastFocusSave = Date.now(); broadcastState();
+    return focusView(state.focus);
+  });
+  ipcMain.handle('focus:toggle', (event) => {
+    fromApp(event); refreshFocus(); toggleFocus(state.focus); saveState(); broadcastState(); return focusView(state.focus);
+  });
+  ipcMain.handle('focus:end', (event) => {
+    fromApp(event); refreshFocus(); state.focus.session = null; saveState(); broadcastState(); return focusView(state.focus);
+  });
+  ipcMain.handle('focus:settings', (event, input) => {
+    fromApp(event); state.focus.settings = normalizeFocus({ settings: input }).settings; saveState(); broadcastState();
+  });
+  ipcMain.handle('journal:export', async (event) => {
+    if (event.sender !== panelWindow?.webContents) throw new Error('请从日记页导出');
+    const result = await dialog.showSaveDialog(panelWindow, { title: '保存月薪喵的陪伴日记', defaultPath: '月薪喵的陪伴日记.txt', filters: [{ name: '文本日记', extensions: ['txt'] }] });
+    if (result.canceled) return false;
+    fs.writeFileSync(result.filePath, '\ufeff' + journalText(state.journal), 'utf8'); return true;
+  });
   ipcMain.handle('companion:pet', (event) => {
     fromPet(event);
     if (playSession && Date.now() > playSession.expiresAt) playSession = null;
@@ -352,6 +418,7 @@ function registerIpc() {
     const previousSatiety = state.feeding.satiety;
     const result = feedPet(state.feeding, foodId);
     result.companion = interactCompanion(state.companion, 'feed', previousSatiety, Date.now(), foodId);
+    recordJournal(state.journal, 'feed', { ...result.companion, foodId }, state.companion);
     playSession = null;
     saveState();
     feedingBusy = true;
@@ -399,9 +466,12 @@ function registerIpc() {
     petDragging = Boolean(dragging);
     if (petDragging) setPetInteractive(true);
   });
-  ipcMain.on('pet:setPosition', (_event, x, y) => {
-    if (!petWindow || !Number.isFinite(x) || !Number.isFinite(y)) return;
-    petWindow.setPosition(Math.round(x), Math.round(y));
+  ipcMain.on('pet:setPosition', (event, x, y) => {
+    if (!petWindow || petWindow.isDestroyed() || event.sender !== petWindow.webContents) return;
+    const position = normalizePetPosition(x, y);
+    if (!position) return;
+    try { petWindow.setPosition(...position); }
+    catch (error) { console.warn('月薪喵拖拽位置更新失败：', error.message); }
   });
   ipcMain.handle('reminder:add', (_event, input) => {
     const title = String(input?.title || '').trim();
@@ -493,6 +563,7 @@ function registerIpc() {
         const bytes = fs.readFileSync(source);
         const extension = imageExtension(bytes);
         const entry = { id: crypto.randomUUID(), extension, name: path.basename(source, path.extname(source)).slice(0, 40) || '新动作', duration: normalizeDuration(duration), random: true };
+        entry.tags = normalizeTags(entry);
         // Preserve the original bytes, including all animation frames and timings.
         fs.writeFileSync(path.join(folder, `${entry.id}.${extension}`), bytes);
         state.customActions.push(entry);
@@ -502,11 +573,13 @@ function registerIpc() {
     saveState(); broadcastState();
     return { entries, errors };
   });
-  ipcMain.handle('action:update', (_event, id, update) => {
+  ipcMain.handle('action:update', (event, id, update) => {
+    fromApp(event);
     const entry = state.customActions.find((item) => item.id === id);
     if (!entry) return;
     if (typeof update?.random === 'boolean') entry.random = update.random;
     if (update?.duration !== undefined) entry.duration = normalizeDuration(update.duration);
+    if (Array.isArray(update?.tags)) entry.tags = normalizeTags({ ...entry, tags: update.tags });
     saveState(); broadcastState();
   });
   ipcMain.handle('action:remove', (_event, id) => {
@@ -540,6 +613,7 @@ app.whenReady().then(() => {
   app.setAppUserModelId('com.yuexin.desktop-pet');
   state = loadState();
   if (seedBundledActions(state, path.join(__dirname, '..', 'assets', 'actions'), path.join(app.getPath('userData'), 'action-assets'))) saveState();
+  state.customActions = state.customActions.map((entry) => ({ ...entry, tags: normalizeTags(entry) }));
   advanceSatiety(state.feeding);
   advanceCompanion(state.companion, state.feeding.satiety);
   saveState();
@@ -573,7 +647,10 @@ app.whenReady().then(() => {
   setInterval(checkReminders, 15000);
   setInterval(refreshLimits, 120000);
   setInterval(refreshSatiety, 60000);
+  setInterval(refreshFocus, 1000);
+  powerMonitor.on('suspend', pauseFocusForSystem);
+  powerMonitor.on('lock-screen', pauseFocusForSystem);
   checkReminders();
   refreshLimits();
 });
-app.on('before-quit', () => codex.stop());
+app.on('before-quit', () => { pauseFocusForSystem(); codex.stop(); });

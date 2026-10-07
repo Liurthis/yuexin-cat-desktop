@@ -96,4 +96,14 @@ function setSleeping(companion, sleeping, satiety, now = Date.now()) {
   companion.sleeping = Boolean(sleeping);
 }
 
-module.exports = { HOUR, COOLDOWNS, BOND_DAILY_LIMIT, dayKey, normalizeCompanion, advanceCompanion, companionView, interactCompanion, setSleeping };
+function rewardFocus(companion, satiety, now = Date.now()) {
+  advanceCompanion(companion, satiety, now);
+  const moodGained = Math.min(3, 100 - companion.mood);
+  let gain = 2;
+  if (companion.lastVisit !== dayKey(now)) { companion.lastVisit = dayKey(now); companion.daysTogether += 1; gain += 2; }
+  const bondGained = Math.min(gain, BOND_DAILY_LIMIT - companion.daily.bondGained, 1000 - companion.bond);
+  companion.mood += moodGained; companion.bond += bondGained; companion.daily.bondGained += bondGained;
+  return { moodGained, bondGained };
+}
+
+module.exports = { HOUR, COOLDOWNS, BOND_DAILY_LIMIT, dayKey, normalizeCompanion, advanceCompanion, companionView, interactCompanion, setSleeping, rewardFocus };

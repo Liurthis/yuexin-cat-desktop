@@ -53,6 +53,28 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .companion-menu.compact .companion-heading button { width:18px; height:18px; }
 .companion-menu.compact .companion-buttons button { padding:5px 1px; font-size:12px; line-height:16px; }
 .companion-menu.compact #companion-status { margin-top:5px; font-size:12px; line-height:16px; }
+.focus-button { position:absolute; z-index:7; top:123px; right:12px; width:40px; height:40px; padding:0; border:2px solid #fffaf1; border-radius:50%; background:#e6edf9; box-shadow:0 2px 6px rgba(86,55,37,.2); color:#315eb5; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.focus-button span { font-size:19px; line-height:21px; }
+.focus-button small { font-size:9px; font-weight:800; line-height:11px; }
+.focus-button.active { background:#dae8fb; }
+.focus-button.break { background:#e5eedc; color:#38663d; }
+.focus-button.paused { opacity:.75; }
+.focus-button:focus-visible { outline:2px solid #315eb5; outline-offset:2px; }
+.focus-menu { position:absolute; z-index:8; top:171px; right:12px; width:224px; padding:10px; border:1px solid #d8bea2; border-radius:15px; background:#fffaf1; color:#493227; box-shadow:0 4px 12px rgba(86,55,37,.2); transform-origin:top right; }
+.focus-countdown { margin:5px 0 7px; text-align:center; font-size:27px; line-height:30px; font-weight:800; color:#315eb5; font-variant-numeric:tabular-nums; }
+.focus-menu select { width:100%; padding:5px; border:1px solid #d8bea2; border-radius:7px; font:13px "Microsoft YaHei",sans-serif; background:#fffdf8; color:#493227; }
+.focus-controls { display:flex; gap:5px; margin-top:7px; }
+.focus-controls button { flex:1; padding:6px 3px; border:1px solid #c4d3ed; border-radius:8px; background:#e5edfa; color:#31518a; font:600 13px/18px "Microsoft YaHei",sans-serif; cursor:pointer; }
+.focus-controls button:disabled { opacity:.5; cursor:wait; }
+#quick-focus-status { margin:6px 0 0; font-size:12px; line-height:16px; color:#614737; }
+.focus-links { display:flex; justify-content:space-between; gap:5px; margin-top:6px; }
+.focus-links button { padding:0; border:0; background:transparent; color:#315eb5; font:12px "Microsoft YaHei",sans-serif; cursor:pointer; }
+.focus-menu.compact { padding:6px; border-radius:12px; }
+.focus-menu.compact .companion-heading strong { font-size:13px; }
+.focus-menu.compact .companion-heading button { width:18px; height:18px; }
+.focus-menu.compact .focus-countdown { margin:3px 0; font-size:24px; line-height:26px; }
+.focus-menu.compact .focus-controls button { padding:4px; }
+.pet.focus-pose:not(.custom) .idle { animation:breathe 7s ease-in-out infinite; }
 .affection-effect { position:absolute; z-index:6; top:70px; left:70px; width:120px; height:80px; pointer-events:none; opacity:0; color:#e27193; }
 .affection-effect span { position:absolute; font-size:23px; left:45px; top:20px; }
 .affection-effect span:first-child { left:5px; top:40px; font-size:18px; }

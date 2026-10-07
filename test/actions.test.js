@@ -24,7 +24,7 @@ test('idle timer plays a newly imported GIF and restores the rounded image after
   const elements = new Map();
   function element(id) {
     if (elements.has(id)) return elements.get(id);
-    const node = { className: id === 'pet' ? 'pet' : '', hidden: ['quick-feed-menu', 'companion-menu'].includes(id), style: {}, textContent: '', attributes: {}, addEventListener() {}, setAttribute(name, value) { this.attributes[name] = String(value); }, contains(target) { return this === target; }, removeAttribute(name) { delete this[name]; } };
+    const node = { className: id === 'pet' ? 'pet' : '', hidden: ['quick-feed-menu', 'companion-menu', 'focus-menu'].includes(id), dataset: {}, replaceChildren() {}, style: {}, textContent: '', attributes: {}, addEventListener() {}, setAttribute(name, value) { this.attributes[name] = String(value); }, contains(target) { return this === target; }, removeAttribute(name) { delete this[name]; } };
     function classes() { return new Set(node.className.split(' ').filter(Boolean)); }
     node.classList = {
       add(...names) { const values = classes(); names.forEach((name) => values.add(name)); node.className = [...values].join(' '); },
@@ -41,7 +41,7 @@ test('idle timer plays a newly imported GIF and restores the rounded image after
   const initial = { idleAnimations: true, randomInterval: 30, petScale: 1, showActionText: true, customActions: [], limits: { buckets: [], status: '测试' } };
   const math = Object.create(Math); math.random = () => 0;
   const context = vm.createContext({
-    document: { getElementById: element, addEventListener: (name, callback) => { documentEvents[name] = callback; } },
+    document: { getElementById: element, createElement: () => ({}), addEventListener: (name, callback) => { documentEvents[name] = callback; } },
     window: { addEventListener() {}, yuexin: {
       onState: (callback) => { handlers.state = callback; },
       onAction: (callback) => { handlers.action = callback; },
@@ -49,12 +49,13 @@ test('idle timer plays a newly imported GIF and restores the rounded image after
       onFeed: (callback) => { handlers.feed = callback; },
       onFeedingMenu: (callback) => { handlers.menu = callback; },
       onCompanionMenu() {}, onInteraction() {},
+      onGreeting() {}, onFocusMenu() {}, onFocusState() {}, onFocusFinished() {},
       finishFeeding: () => { mealsFinished += 1; },
       onHover() {}, setPetDragging() {},
       getState: async () => initial,
     } },
     Math: math, Date,
-    YuexinActions: require('../src/actions'), YuexinLibrary: require('../src/action-library'), YuexinPetting: require('../src/petting-gesture'),
+    YuexinActions: require('../src/actions'), YuexinLibrary: require('../src/action-library'), YuexinPetting: require('../src/petting-gesture'), YuexinContext: require('../src/action-context'),
     setTimeout(callback, delay) { const id = ++timerId; timers.set(id, { callback, delay }); return id; },
     clearTimeout(id) { timers.delete(id); },
   });

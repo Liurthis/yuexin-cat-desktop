@@ -7,6 +7,9 @@ let currentState;
 let feedPending = false;
 let feedingImageSignature;
 let interactionImageSignature;
+let focusPending = false;
+let actionSignature;
+let journalSignature;
 
 function selectTab(name) {
   tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === name));
@@ -75,9 +78,86 @@ function render(state) {
   renderActions(state.customActions);
   renderFeeding(state.feeding);
   renderCompanion(state.companion);
+  renderFocus(state.focus);
+  renderJournal(state.journal);
 }
 window.yuexin.onState(render);
 window.yuexin.getState().then(render);
+
+function renderFocus(focus) {
+  if (!focus) return;
+  const session = focus.session;
+  const seconds = Math.max(0, Math.ceil((session?.remainingMs ?? focus.settings.minutes * 60000) / 1000));
+  document.getElementById('panel-focus-countdown').textContent = String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+  document.getElementById('panel-focus-heading').textContent = session ? (session.phase === 'focus' ? '月薪喵正在陪你专注' : '一起休息一下') + (session.status === 'paused' ? ' · 已暂停' : '') : '准备开始';
+  document.getElementById('panel-focus-fill').style.width = (session?.progress || 0) + '%';
+  document.getElementById('panel-focus-meter').setAttribute('aria-valuenow', session?.progress || 0);
+  const main = document.getElementById('panel-focus-main');
+  main.textContent = !session ? '开始专注' : session.status === 'paused' ? '继续' : '暂停'; main.disabled = focusPending;
+  const end = document.getElementById('panel-focus-end'); end.hidden = !session; end.disabled = focusPending;
+  if (!focusPending) document.getElementById('panel-focus-status').textContent = !session ? '结束后提醒休息，完成的时间会记在日记里。' : session.phase === 'break' ? '喝口水、伸伸懒腰，再开始下一段。' : session.status === 'paused' ? '准备好后继续，暂停时间不会计入。' : '一次只做一件事，我在这里陪你。';
+  for (const [id, key] of [['focus-minutes', 'minutes'], ['focus-break-minutes', 'breakMinutes']]) {
+    const input = document.getElementById(id);
+    if (input.dataset.saved !== String(focus.settings[key])) {
+      if (document.activeElement !== input) input.value = focus.settings[key];
+      input.dataset.saved = String(focus.settings[key]);
+    }
+  }
+}
+window.yuexin.onFocusState((focus) => { if (currentState) { currentState.focus = focus; renderFocus(focus); } });
+async function focusControl(operation) {
+  if (focusPending) return;
+  focusPending = true; renderFocus(currentState.focus);
+  let failure;
+  try { currentState.focus = await operation(); }
+  catch (error) { failure = error.message; }
+  finally { focusPending = false; renderFocus(currentState.focus); if (failure) document.getElementById('panel-focus-status').textContent = failure; }
+}
+document.getElementById('panel-focus-main').onclick = () => focusControl(() => currentState.focus.session ? window.yuexin.toggleFocus() : window.yuexin.startFocus({ minutes: Number(document.getElementById('focus-minutes').value), breakMinutes: Number(document.getElementById('focus-break-minutes').value) }));
+document.getElementById('panel-focus-end').onclick = () => focusControl(() => window.yuexin.endFocus());
+document.getElementById('focus-settings-form').onsubmit = async (event) => {
+  event.preventDefault();
+  try { await window.yuexin.setFocusSettings({ minutes: Number(document.getElementById('focus-minutes').value), breakMinutes: Number(document.getElementById('focus-break-minutes').value) }); document.getElementById('focus-settings-status').textContent = '已保存，下次开始时使用新的时长。'; }
+  catch (error) { document.getElementById('focus-settings-status').textContent = error.message; }
+};
+document.getElementById('focus-open-journal').onclick = () => selectTab('journal');
+function renderJournal(journal) {
+  if (!journal || journalSignature === JSON.stringify(journal)) return;
+  journalSignature = JSON.stringify(journal);
+  const total = journal.totals;
+  document.getElementById('journal-totals').textContent = '🐟 喂食 ' + total.feed + ' 次 · 🤲 摸摸 ' + total.petting + ' 次 · 🧶 逗猫 ' + total.play + ' 局\n⌛ 一起完成 ' + total.focus + ' 段专注，共 ' + total.focusMinutes + ' 分钟';
+  const badges = document.getElementById('journal-badges'); badges.replaceChildren();
+  for (const badge of journal.badges) {
+    const card = document.createElement('div'); card.className = 'badge' + (badge.earnedAt ? ' earned' : '');
+    const title = document.createElement('strong'); title.textContent = badge.emoji + ' ' + badge.name;
+    const detail = document.createElement('small'); detail.textContent = badge.earnedAt ? '已获得 · ' + dateText(badge.earnedAt) : badge.description;
+    card.append(title, detail); badges.append(card);
+  }
+  const list = document.getElementById('journal-days');
+  const opened = new Set([...list.querySelectorAll('details[open]')].map((item) => item.dataset.date));
+  list.replaceChildren();
+  if (!journal.days.length) { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = '今天先摸摸我的头，写下我们的第一件小事吧～'; list.append(empty); }
+  for (const [index, day] of journal.days.entries()) {
+    const card = document.createElement('details'); card.className = 'card journal-day'; card.dataset.date = day.date; card.open = opened.has(day.date) || index === 0;
+    const summary = document.createElement('summary');
+    const date = document.createElement('strong'); date.textContent = day.date;
+    const text = document.createElement('p'); text.textContent = day.summary;
+    const snapshot = document.createElement('small'); snapshot.textContent = '最近一次互动 · 心情 ' + day.mood + ' · 亲密度 ' + day.bond;
+    summary.append(date, text, snapshot); card.append(summary);
+    for (const entry of [...day.entries].reverse()) {
+      const row = document.createElement('div'); row.className = 'journal-entry';
+      const time = document.createElement('time'); time.dateTime = new Date(entry.at).toISOString(); time.textContent = new Date(entry.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      const text = document.createElement('span'); text.textContent = entry.text; row.append(time, text); card.append(row);
+    }
+    list.append(card);
+  }
+}
+document.getElementById('export-journal').onclick = async (event) => {
+  event.target.disabled = true;
+  try { if (await window.yuexin.exportJournal()) document.getElementById('journal-status').textContent = '日记已导出为文本，可以留作纪念。'; }
+  catch (error) { document.getElementById('journal-status').textContent = error.message; }
+  finally { event.target.disabled = false; }
+};
 
 function renderFeeding(feeding) {
   const value = feeding.satiety;
@@ -234,6 +314,9 @@ scaleInput.oninput = () => {
 scaleInput.onchange = () => { clearTimeout(scaleTimer); window.yuexin.setPetScale(Number(scaleInput.value) / 100); };
 document.getElementById('reset-size').onclick = () => { clearTimeout(scaleTimer); window.yuexin.setPetScale(1); };
 function renderActions(custom) {
+  const signature = JSON.stringify(custom);
+  if (actionSignature === signature) return;
+  actionSignature = signature;
   const builtins = document.getElementById('action-list');
   if (!builtins.children.length) YuexinActions.forEach((entry) => {
     const button = document.createElement('button'); button.className = 'action-card';
@@ -243,7 +326,9 @@ function renderActions(custom) {
     button.append(emoji, title, detail); button.onclick = () => window.yuexin.playAction(entry.id);
     builtins.append(button);
   });
-  const customList = document.getElementById('custom-action-list'); customList.replaceChildren();
+  const customList = document.getElementById('custom-action-list');
+  const opened = new Set([...customList.querySelectorAll('details[open]')].map((item) => item.dataset.id));
+  customList.replaceChildren();
   const enabledCount = custom.filter((item) => item.random !== false).length;
   document.getElementById('random-action-count').textContent = `共 ${custom.length} 个图片动作 · ${enabledCount} 个参与随机播放`;
   if (!custom.length) {
@@ -262,6 +347,19 @@ function renderActions(custom) {
     const duration = document.createElement('input'); duration.type = 'number'; duration.min = 2; duration.max = 120; duration.value = entry.duration / 1000; duration.setAttribute('aria-label', entry.name + '播放秒数'); duration.onchange = () => window.yuexin.updateAction(entry.id, { duration: Number(duration.value) });
     durationLabel.append(duration, document.createTextNode('秒'));
     controls.append(randomLabel, durationLabel); name.append(title, controls);
+    const tags = YuexinContext.normalizeTags(entry);
+    const purposes = document.createElement('details'); purposes.className = 'action-tags'; purposes.dataset.id = entry.id; purposes.open = opened.has(entry.id);
+    const summary = document.createElement('summary'); summary.textContent = '用途：' + (YuexinContext.TAGS.filter((tag) => tags.includes(tag.id)).map((tag) => tag.name).join('、') || '仅手动播放');
+    const choices = document.createElement('div'); choices.className = 'tag-options';
+    for (const tag of YuexinContext.TAGS) {
+      const label = document.createElement('label'); const check = document.createElement('input'); check.type = 'checkbox'; check.value = tag.id; check.checked = tags.includes(tag.id);
+      check.onchange = async () => {
+        try { await window.yuexin.updateAction(entry.id, { tags: [...choices.querySelectorAll('input:checked')].map((input) => input.value) }); }
+        catch (error) { document.getElementById('action-status').textContent = error.message; actionSignature = undefined; renderActions(currentState.customActions); }
+      };
+      label.append(check, document.createTextNode(tag.emoji + ' ' + tag.name)); choices.append(label);
+    }
+    purposes.append(summary, choices); name.append(purposes);
     const buttons = document.createElement('div'); buttons.className = 'action-buttons';
     const play = document.createElement('button'); play.className = 'secondary'; play.textContent = '▶'; play.title = '播放'; play.onclick = () => window.yuexin.playAction(entry.id);
     const remove = document.createElement('button'); remove.className = 'remove-action'; remove.textContent = '×'; remove.title = '移除动作'; remove.onclick = () => window.yuexin.removeAction(entry.id);

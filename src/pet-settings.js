@@ -18,4 +18,10 @@ function petBounds(scale, previous, workArea) {
 function validCustomAction(action) {
   return action && /^[0-9a-f-]{36}$/.test(action.id) && /^(gif|png|webp|jpg)$/.test(action.extension) && typeof action.name === 'string' && Number.isFinite(action.duration);
 }
-module.exports = { normalizeScale, petBounds, validCustomAction };
+function normalizePetPosition(x, y) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  // Electron's native integer converter rejects negative zero and numbers outside int32.
+  const position = [Math.round(x) || 0, Math.round(y) || 0];
+  return position.every((value) => value >= -2147483648 && value <= 2147483647) ? position : null;
+}
+module.exports = { normalizeScale, petBounds, validCustomAction, normalizePetPosition };

@@ -9,7 +9,7 @@ button { cursor:pointer; }
 .eyebrow { color:#a97e60; font-size:9px; font-weight:800; letter-spacing:2.5px; }
 .hero h1 { margin:2px 0 3px; font-size:21px; letter-spacing:.5px; }
 .hero p { margin:0; color:var(--muted); font-size:11px; }
-.tabs { display:flex; position:sticky; top:0; z-index:2; padding:8px 12px; background:#fffaf5; border-bottom:1px solid var(--line); gap:5px; }
+.tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); position:sticky; top:0; z-index:2; padding:8px 12px; background:#fffaf5; border-bottom:1px solid var(--line); gap:5px; }
 .tabs button { flex:1; min-width:0; border:0; border-radius:10px; padding:9px 1px; background:transparent; color:#806655; font-weight:700; font-size:12px; }
 .tabs button:hover { background:#f9eddf; }
 .tabs button.active { background:#f4dfc8; color:#5e3f30; }
@@ -139,3 +139,28 @@ input::placeholder { color:#b8a698; }
 .food-card.favorite strong::after { content:' ★'; color:#af7926; }
 .interaction-setting { padding:15px; margin-top:12px; }
 .interaction-setting label { margin-top:12px; }
+.focus-card { padding:20px; text-align:center; }
+#panel-focus-countdown { font-size:48px; font-weight:800; color:var(--blue); font-variant-numeric:tabular-nums; margin:15px 0; }
+.focus-controls { display:flex; justify-content:center; gap:10px; margin-top:18px; }
+.focus-settings { margin-top:14px; }
+.focus-inputs { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+.focus-card .hint { margin-bottom:0; }
+.journal-totals { padding:12px; border-radius:12px; background:#f6e9d8; line-height:1.8; font-size:13px; white-space:pre-line; }
+.badge-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.badge { padding:12px; border:1px dashed var(--line); border-radius:14px; background:#f4eee7; color:#958170; }
+.badge.earned { border-style:solid; border-color:#dfc089; background:#fff6df; color:var(--ink); }
+.badge strong,.badge small { display:block; }
+.badge strong { font-size:13px; }
+.badge small { margin-top:5px; font-size:12px; line-height:1.5; }
+.journal-day { padding:16px; }
+.journal-day summary { cursor:pointer; line-height:1.7; }
+.journal-day summary strong { font-size:14px; }
+.journal-day summary p { margin:7px 0; font-size:13px; }
+.journal-day summary small { color:var(--muted); font-size:12px; }
+.journal-entry { display:flex; gap:10px; border-top:1px solid #f1e8dd; padding:10px 0; line-height:1.6; font-size:13px; }
+.journal-entry time { color:var(--muted); flex:none; font-variant-numeric:tabular-nums; }
+.action-tags { margin-top:9px; font-size:12px; }
+.action-tags summary { cursor:pointer; color:var(--blue); line-height:1.6; }
+.tag-options { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+.tag-options label { display:flex; align-items:center; gap:4px; padding:6px 8px; border-radius:8px; background:#f7efe4; font-size:12px; font-weight:normal; }
+.tag-options input { margin:0; accent-color:var(--blue); }
