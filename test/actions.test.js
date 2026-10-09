@@ -50,6 +50,7 @@ test('idle timer plays a newly imported GIF and restores the rounded image after
       onFeedingMenu: (callback) => { handlers.menu = callback; },
       onCompanionMenu() {}, onInteraction() {},
       onGreeting() {}, onFocusMenu() {}, onFocusState() {}, onFocusFinished() {},
+      onWalk() {}, setPetBusy() {},
       finishFeeding: () => { mealsFinished += 1; },
       onHover() {}, setPetDragging() {},
       getState: async () => initial,

@@ -39,10 +39,21 @@ let cooldownTimer;
 let heartTimer;
 let sleepImageUrl;
 let nextPettingAt = 0;
+let lastBusyReport;
+let walkImageUrl;
+let habitPending = false;
+
+function reportActivity() {
+  const menu = !quickFeedMenu.hidden || !companionMenu.hidden || !focusMenu.hidden || Boolean(play);
+  const info = { menu, busy: menu || Boolean(drag) || Boolean(feedingEntry) || Boolean(currentAction && currentAction !== 'walking') };
+  const signature = JSON.stringify(info);
+  if (signature !== lastBusyReport) { lastBusyReport = signature; window.yuexin.setPetBusy(info); }
+}
 
 function scheduleIdle() {
+  reportActivity();
   clearTimeout(idleTimer);
-  if (!state.idleAnimations || focusing() || feedingEntry || state.feeding?.isEating || state.companion?.sleeping || play || !quickFeedMenu.hidden || !companionMenu.hidden || !focusMenu.hidden) return;
+  if (!state.idleAnimations || state.quietMode || state.roaming?.isWalking || focusing() || feedingEntry || state.feeding?.isEating || state.companion?.sleeping || play || !quickFeedMenu.hidden || !companionMenu.hidden || !focusMenu.hidden) return;
   const wait = (state.randomInterval || 30) * 1000 * (.7 + Math.random() * .6);
   idleTimer = setTimeout(() => {
     if (!drag && !currentAction) randomAction();
@@ -61,15 +72,16 @@ function resetAction(resumeSleep = true) {
   clearTimeout(actionTimer);
   if (feedingEntry) { feedingEntry = null; window.yuexin.finishFeeding(); }
   currentAction = null;
-  pet.className = 'pet' + (state.idleAnimations && !focusing() ? '' : ' quiet');
+  pet.className = 'pet' + (state.idleAnimations && !state.quietMode && !focusing() ? '' : ' quiet');
   customImage.hidden = true;
   customImage.removeAttribute('src');
   effect.textContent = '';
   sleepImageUrl = null;
   focusImageUrl = null;
+  walkImageUrl = null;
   if (resumeSleep) {
     if (tryCelebration()) return;
-    syncSleeping(); syncFocusPose(); tryGreeting();
+    syncSleeping(); syncFocusPose(); syncWalking(); tryGreeting();
   }
   scheduleIdle();
 }
@@ -77,6 +89,7 @@ function playAction(id) {
   if (feedingEntry || state.feeding?.isEating || state.companion?.sleeping || play) return;
   const entry = YuexinActions.find((item) => item.id === id) || state.customActions.find((item) => item.id === id);
   if (!entry) return;
+  if (state.roaming?.isWalking) window.yuexin.setPetBusy({ busy: true, menu: false });
   resetAction(false);
   currentAction = id;
   void pet.offsetWidth;
@@ -87,16 +100,17 @@ function playAction(id) {
     customImage.hidden = false;
   } else effect.textContent = entry.emoji;
   if (!entry.extension) actionTimer = setTimeout(resetAction, entry.duration);
+  reportActivity();
 }
 customImage.onload = () => {
   if (!currentAction) return;
   pet.classList.add('custom');
-  if (['sleeping', 'focusing'].includes(currentAction)) return;
+  if (['sleeping', 'focusing', 'walking'].includes(currentAction)) return;
   const entry = state.customActions.find((item) => item.id === currentAction);
   actionTimer = setTimeout(resetAction, feedingEntry?.duration || entry?.duration || 5000);
 };
 customImage.onerror = () => {
-  if (['sleeping', 'focusing'].includes(currentAction)) {
+  if (['sleeping', 'focusing', 'walking'].includes(currentAction)) {
     customImage.hidden = true; customImage.removeAttribute('src'); pet.classList.remove('custom');
     return;
   }
@@ -120,6 +134,7 @@ pet.addEventListener('pointerdown', async (event) => {
   drag = gesture;
   strokes.reset();
   window.yuexin.setPetDragging(true);
+  reportActivity();
   try { const position = await window.yuexin.getPetPosition(); if (drag === gesture) gesture.position = position; }
   catch { if (drag === gesture) { drag = null; window.yuexin.setPetDragging(false); } }
 });
@@ -144,8 +159,9 @@ pet.addEventListener('pointerup', () => {
     if (state.companion?.sleeping) window.yuexin.setSleeping(false).catch(() => {});
     else randomAction();
   }
+  reportActivity();
 });
-pet.addEventListener('pointercancel', () => { drag = null; window.yuexin.setPetDragging(false); pet.classList.remove('dragging'); });
+pet.addEventListener('pointercancel', () => { drag = null; window.yuexin.setPetDragging(false); pet.classList.remove('dragging'); reportActivity(); });
 pet.addEventListener('pointermove', (event) => {
   if (drag || play || feedingEntry || state.feeding?.isEating || state.companion?.sleeping || Date.now() < nextPettingAt || !companionMenu.hidden || !quickFeedMenu.hidden || !focusMenu.hidden) { strokes.reset(); return; }
   const bounds = pet.getBoundingClientRect();
@@ -172,6 +188,7 @@ function setQuickFeedOpen(open) {
   renderQuickFeeding();
   if (open) clearTimeout(idleTimer);
   else scheduleIdle();
+  reportActivity();
 }
 satietyButton.onclick = () => setQuickFeedOpen(quickFeedMenu.hidden);
 document.getElementById('quick-feed-close').onclick = () => setQuickFeedOpen(false);
@@ -217,6 +234,7 @@ function setCompanionOpen(open) {
   moodButton.setAttribute('aria-expanded', String(open));
   renderCompanion();
   if (open) clearTimeout(idleTimer); else scheduleIdle();
+  reportActivity();
 }
 moodButton.onclick = () => setCompanionOpen(companionMenu.hidden);
 document.getElementById('companion-close').onclick = () => setCompanionOpen(false);
@@ -227,7 +245,8 @@ function renderCompanion(updateStatus = true) {
   const { mood, emotion, level, bond, sleeping, daily } = companion;
   document.getElementById('mood-emoji').textContent = emotion.emoji;
   document.getElementById('mood-number').textContent = mood;
-  document.getElementById('mood-label').textContent = emotion.emoji + ' ' + emotion.name + ' · ' + mood;
+  document.getElementById('mood-label').textContent = emotion.emoji + ' ' + (state.petName || '月薪喵') + ' · ' + mood;
+  document.getElementById('mood-label').title = (state.petName || '月薪喵') + ' · ' + emotion.name;
   moodButton.classList.toggle('low', mood < 40);
   moodButton.classList.toggle('sleeping', sleeping);
   moodButton.title = '心情 ' + mood + '/100 · ' + level.name + ' · 亲密度 ' + bond;
@@ -254,6 +273,14 @@ function renderCompanion(updateStatus = true) {
   const sleepButton = document.getElementById('sleep-button');
   sleepButton.textContent = sleeping ? '☀ 起床' : '💤 睡觉';
   sleepButton.disabled = interactionPending || Boolean(state.feeding?.isEating);
+  const walkButton = document.getElementById('walk-button');
+  const returning = state.roaming?.isWalking || state.roaming?.awayFromHome;
+  walkButton.textContent = returning ? '🏠 回小窝' : '🐾 出去走走';
+  walkButton.disabled = habitPending || (!returning && (busy || sleeping || focusing() || state.quietMode));
+  walkButton.title = returning ? '回到你上次拖放的位置' : state.quietMode ? '关闭安静陪伴后再出去走走' : '在小窝附近走一小段，自己回来';
+  const quietButton = document.getElementById('quiet-button');
+  quietButton.textContent = state.quietMode ? '☀ 恢复活力' : '🌙 安静陪伴';
+  quietButton.disabled = habitPending; quietButton.setAttribute('aria-pressed', String(Boolean(state.quietMode)));
   if (updateStatus) companionStatus.textContent = sleeping ? '安静睡一会儿，心情慢慢恢复～' : completed === 3 ? '今天的陪伴集齐啦 ♥ 第 ' + companion.daysTogether + ' 天' : '头顶来回移动鼠标，也能摸摸～';
   clearTimeout(cooldownTimer);
   const wait = Math.min(...[petWait, playWait].filter((seconds) => seconds > 0));
@@ -289,14 +316,52 @@ function syncFocusPose() {
     if (url) customImage.src = url; else customImage.removeAttribute('src');
   }
 }
+function syncWalking() {
+  if (!state.roaming?.isWalking || state.quietMode || state.companion?.sleeping || focusing() || feedingEntry || play) {
+    if (currentAction === 'walking') resetAction(false);
+    return;
+  }
+  if (currentAction && currentAction !== 'walking') return;
+  const entry = state.customActions.find((item) => item.random !== false && YuexinContext.normalizeTags(item).includes('walk'));
+  const url = entry ? 'yuexin-asset://actions/' + entry.id + '.' + entry.extension : null;
+  currentAction = 'walking'; clearTimeout(actionTimer); clearTimeout(idleTimer);
+  pet.classList.add('walking', 'performing'); pet.classList.toggle('walk-left', state.roaming.direction < 0);
+  if (walkImageUrl !== url) {
+    walkImageUrl = url; pet.classList.remove('custom'); customImage.hidden = !url;
+    if (url) customImage.src = url; else customImage.removeAttribute('src');
+  }
+  reportActivity();
+}
+window.yuexin.onWalk((info) => {
+  state.roaming = { ...state.roaming, isWalking: info.active, direction: info.direction };
+  if (info.active && currentAction !== 'walking') resetAction(false);
+  syncWalking(); scheduleIdle(); renderCompanion();
+});
+document.getElementById('walk-button').onclick = async () => {
+  if (habitPending) return;
+  const returning = state.roaming?.isWalking || state.roaming?.awayFromHome;
+  if (!returning) resetAction(false);
+  habitPending = true; setCompanionOpen(false); setQuickFeedOpen(false); setFocusOpen(false); renderCompanion(false);
+  try { await window.yuexin.toggleWalk(); }
+  catch (error) { setCompanionOpen(true); companionStatus.textContent = error.message; }
+  finally { habitPending = false; renderCompanion(false); }
+};
+document.getElementById('quiet-button').onclick = async () => {
+  if (habitPending) return;
+  habitPending = true; renderCompanion(false);
+  try { await window.yuexin.setQuietMode(!state.quietMode); setCompanionOpen(false); }
+  catch (error) { companionStatus.textContent = error.message; }
+  finally { habitPending = false; renderCompanion(false); }
+};
 function tryGreeting() {
-  if (!pendingGreeting || !state.idleAnimations || focusing() || state.companion?.sleeping || feedingEntry || play || currentAction || !quickFeedMenu.hidden || !companionMenu.hidden || !focusMenu.hidden) return;
+  if (!pendingGreeting || !state.idleAnimations || state.quietMode || focusing() || state.companion?.sleeping || feedingEntry || play || currentAction || !quickFeedMenu.hidden || !companionMenu.hidden || !focusMenu.hidden) return;
   pendingGreeting = false;
   const entry = YuexinContext.chooseForTag(state.customActions, 'greeting', null);
   if (entry) playAction(entry.id);
 }
 window.yuexin.onGreeting(() => { pendingGreeting = true; setTimeout(tryGreeting, 2200); });
 function tryCelebration() {
+  if (state.quietMode) { pendingCelebration = 0; return false; }
   if (!pendingCelebration || Date.now() > pendingCelebration) { pendingCelebration = 0; return false; }
   if (feedingEntry || state.feeding?.isEating || state.companion?.sleeping || play || currentAction) return false;
   pendingCelebration = 0;
@@ -307,6 +372,7 @@ function setFocusOpen(open) {
   if (open) { setQuickFeedOpen(false); setCompanionOpen(false); stopPlay(); }
   focusMenu.hidden = !open; focusButton.setAttribute('aria-expanded', String(open)); renderFocus();
   if (open) clearTimeout(idleTimer); else scheduleIdle();
+  reportActivity();
 }
 focusButton.onclick = () => setFocusOpen(focusMenu.hidden);
 document.getElementById('focus-close').onclick = () => setFocusOpen(false);
@@ -443,6 +509,7 @@ document.getElementById('play-button').onclick = async () => {
     playHud.style.left = 8 / scale + 'px';
     moveToy(); updatePlayHud();
     playTimer = setTimeout(() => { stopPlay(); renderCompanion(); }, entry.duration);
+    reportActivity();
   } catch (error) { companionStatus.textContent = error.message; }
   finally { interactionPending = false; renderCompanion(false); }
 };
@@ -466,19 +533,24 @@ for (const tab of ['reminders', 'chat', 'actions', 'settings', 'usage']) {
 }
 function render(nextState) {
   const wasFocusing = focusing();
+  const wasQuiet = Boolean(state.quietMode);
   state = nextState;
-  const signature = JSON.stringify([state.idleAnimations, state.randomInterval, state.feeding?.isEating, state.companion?.sleeping, focusing(), YuexinContext.contextTag(state), state.customActions.map((item) => [item.id, item.random, item.tags])]);
+  const signature = JSON.stringify([state.idleAnimations, state.quietMode, state.roaming?.isWalking, state.randomInterval, state.feeding?.isEating, state.companion?.sleeping, focusing(), YuexinContext.contextTag(state), state.customActions.map((item) => [item.id, item.random, item.tags])]);
   if (signature !== idleSignature) { idleSignature = signature; scheduleIdle(); }
   stage.style.transform = 'scale(' + (state.petScale || 1) + ')';
-  pet.classList.toggle('quiet', !state.idleAnimations || focusing());
-  if (currentAction && !['sleeping', 'focusing', 'reminder'].includes(currentAction) && !feedingEntry && !YuexinActions.some((item) => item.id === currentAction) && !state.customActions.some((item) => item.id === currentAction)) resetAction();
+  pet.classList.toggle('quiet', !state.idleAnimations || state.quietMode || focusing());
+  if (state.quietMode && !wasQuiet && currentAction && !['sleeping', 'focusing', 'reminder', 'feeding'].includes(currentAction) && !feedingEntry) resetAction(false);
+  if (currentAction && !['sleeping', 'focusing', 'walking', 'reminder'].includes(currentAction) && !feedingEntry && !YuexinActions.some((item) => item.id === currentAction) && !state.customActions.some((item) => item.id === currentAction)) resetAction();
   if ((state.companion?.sleeping || state.feeding?.isEating || (focusing() && !wasFocusing)) && play) stopPlay();
   if (focusing() && !wasFocusing && !feedingEntry && currentAction !== 'reminder') resetAction(false);
   syncSleeping();
   syncFocusPose();
+  syncWalking();
   renderQuickFeeding();
   renderCompanion();
   renderFocus();
+  document.getElementById('idle-image').alt = state.petName || '月薪喵';
+  reportActivity();
   const codex = state.limits.buckets.find((entry) => entry.id === 'codex') || state.limits.buckets[0];
   usage.textContent = codex?.windows[0] ? codex.windows[0].remainingPercent + '%' : '--%';
   usage.title = codex?.windows[0] ? 'Codex / Work 剩余 ' + codex.windows[0].remainingPercent + '%' : state.limits.status;
@@ -498,18 +570,21 @@ window.yuexin.onFeed((entry) => {
   customImage.src = entry.url + '?t=' + Date.now();
   customImage.hidden = false;
   if (entry.result) showHearts();
+  reportActivity();
 });
 window.yuexin.onReminder((title) => {
   stopPlay(); setCompanionOpen(false); setQuickFeedOpen(false); setFocusOpen(false);
   resetAction(false);
   currentAction = 'reminder';
-  pet.classList.add('performing', 'alarm');
-  effect.textContent = '⏰';
+  pet.classList.add('performing');
+  if (!state.quietMode) { pet.classList.add('alarm'); effect.textContent = '⏰'; }
   say('提醒时间到：' + title, 9000);
   actionTimer = setTimeout(resetAction, 3200);
   chime();
+  reportActivity();
 });
 function chime() {
+  if (state.quietMode) return;
   try {
     const ctx = new AudioContext();
     const oscillator = ctx.createOscillator();

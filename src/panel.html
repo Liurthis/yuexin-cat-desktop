@@ -10,7 +10,7 @@
 <body>
   <header class="hero">
     <img src="../assets/yuexin-idle.png" alt="月薪喵">
-    <div><div class="eyebrow">YUE XIN MIAO</div><h1>月薪喵的小窝</h1><p>陪你工作，也记得提醒你休息。</p></div>
+    <div><div class="eyebrow">YUE XIN MIAO</div><h1 id="pet-home-title">月薪喵的小窝</h1><p>陪你工作，也记得提醒你休息。</p></div>
   </header>
   <nav class="tabs" aria-label="功能">
     <button data-tab="reminders" class="active">⏰ 提醒</button>
@@ -40,7 +40,7 @@
       <button id="focus-open-journal" class="text-button">看看我们的陪伴日记 →</button>
     </section>
     <section id="journal" class="page">
-      <div class="section-title"><div><h2>陪伴日记</h2><p>把一起度过的小事，慢慢收集起来。</p></div><button id="export-journal" class="secondary">导出</button></div>
+      <div class="section-title"><div><h2 id="journal-title">月薪喵的陪伴日记</h2><p>把一起度过的小事，慢慢收集起来。</p></div><button id="export-journal" class="secondary">导出</button></div>
       <div id="journal-totals" class="journal-totals"></div>
       <h3 class="list-heading">我们的纪念章</h3><div id="journal-badges" class="badge-grid"></div>
       <h3 class="list-heading">猫咪记得的日常</h3><div id="journal-days" class="list"></div>
@@ -98,12 +98,30 @@
       <div class="section-title"><div><h2>我的图片动作</h2><p>给 GIF 勾选用途，让月薪喵随状态选择动作。</p></div></div>
       <div class="card info import-card"><strong>添加更多月薪猫动作</strong><p>支持批量导入 GIF、动态 WebP、APNG 和普通图片。导入后默认参与随机播放，轻点桌宠也会随机选一个。</p><div class="import-row"><label>播放秒数<input id="action-duration" type="number" min="2" max="120" value="5"></label><button id="import-action" class="primary">添加图片 / GIF</button></div><p id="action-status" class="status" role="status"></p></div>
       <p id="random-action-count" class="hint"></p>
-      <p class="hint">展开每个动作的“用途”来选择日常、开心、肚子饿、困困、打招呼、专注或庆祝，可多选。自动播放只使用“参与随机”的动作；没有匹配动作时回到日常或现有动作。专注 GIF 会持续循环，直到暂停或结束。</p>
+      <p class="hint">展开每个动作的“用途”来选择日常、开心、肚子饿、困困、打招呼、专注、庆祝或散步，可多选。自动播放只使用“参与随机”的动作；没有匹配动作时回到日常或现有动作。专注 GIF 会持续循环，直到暂停或结束；散步 GIF 会在出门走动时播放。</p>
       <div id="custom-action-list" class="list"></div>
       <h3 class="list-heading">默认互动</h3><div id="action-list" class="action-grid"></div>
     </section>
     <section id="settings" class="page">
       <div class="section-title"><div><h2>桌宠设置</h2><p>调好习惯，让月薪喵陪在你身边。</p></div></div>
+      <div class="card habits-setting">
+        <h3>猫咪的小习惯</h3>
+        <form id="pet-name-form" class="pet-name-form">
+          <label for="pet-name">给它起个昵称<input id="pet-name" maxlength="24" autocomplete="off" aria-describedby="pet-name-hint" placeholder="月薪喵"></label>
+          <button id="save-pet-name" class="secondary" type="submit">保存昵称</button>
+        </form>
+        <p id="pet-name-hint" class="hint nickname-hint"><span>最多 12 个字或表情，留空恢复“月薪喵”。</span><output id="pet-name-count" for="pet-name">0 / 12</output></p>
+        <p id="pet-name-status" class="hint habit-status" role="status"></p>
+        <label class="habit-toggle" for="roaming-enabled"><span><strong>空闲时偶尔散步</strong><small>拖放停下的位置就是它的小窝，附近走一小圈后会自己回来。</small></span><input id="roaming-enabled" type="checkbox"></label>
+        <div class="roaming-options">
+          <label>散步间隔<select id="roaming-interval" aria-label="散步间隔"><option value="180">约 3 分钟</option><option value="300">约 5 分钟</option><option value="600">约 10 分钟</option></select></label>
+          <label>散步速度<select id="roaming-speed" aria-label="散步速度"><option value="slow">慢慢走</option><option value="normal">轻快走</option></select></label>
+        </div>
+        <div class="home-controls"><button id="call-home" class="secondary" type="button">叫它回小窝</button><span id="roaming-state" class="hint"></span></div>
+        <p id="roaming-status" class="hint habit-status" role="status"></p>
+        <label class="habit-toggle quiet-toggle" for="quiet-mode"><span><strong>安静陪伴</strong><small>暂停随机动作和自动散步，关闭桌宠提示音。提醒仍会正常显示。</small></span><input id="quiet-mode" type="checkbox"></label>
+        <p id="quiet-mode-status" class="hint habit-status" role="status"></p>
+      </div>
       <div class="card setting"><div><strong>开机自启动</strong><small>登录 Windows 后自动显示月薪猫</small></div><input id="auto-start" type="checkbox"></div>
       <p id="startup-status" class="hint" role="status"></p>
       <div class="card setting"><div><strong>始终置顶</strong><small>让月薪喵浮在其他窗口上方</small></div><input id="always-on-top" type="checkbox" checked></div>

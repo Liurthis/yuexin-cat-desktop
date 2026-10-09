@@ -5,9 +5,10 @@ body { margin:0; background:var(--cream); color:var(--ink); font-family:"Microso
 button, input, select { font:inherit; }
 button { cursor:pointer; }
 .hero { height:114px; display:flex; align-items:center; gap:9px; padding:12px 22px; background:linear-gradient(115deg,#f7e8d5,#fff8ef 65%); border-bottom:1px solid #edd8bc; }
-.hero img { width:82px; height:88px; object-fit:contain; filter:drop-shadow(0 4px 3px #d4bda5); }
+.hero img { width:82px; height:88px; flex:none; object-fit:contain; filter:drop-shadow(0 4px 3px #d4bda5); }
+.hero > div { min-width:0; }
 .eyebrow { color:#a97e60; font-size:9px; font-weight:800; letter-spacing:2.5px; }
-.hero h1 { margin:2px 0 3px; font-size:21px; letter-spacing:.5px; }
+.hero h1 { margin:2px 0 3px; font-size:21px; letter-spacing:.5px; overflow-wrap:anywhere; }
 .hero p { margin:0; color:var(--muted); font-size:11px; }
 .tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); position:sticky; top:0; z-index:2; padding:8px 12px; background:#fffaf5; border-bottom:1px solid var(--line); gap:5px; }
 .tabs button { flex:1; min-width:0; border:0; border-radius:10px; padding:9px 1px; background:transparent; color:#806655; font-weight:700; font-size:12px; }
@@ -74,6 +75,30 @@ input::placeholder { color:#b8a698; }
 .setting small { color:var(--muted); margin-top:5px; }
 .setting input { width:18px; height:18px; accent-color:var(--blue); }
 .setting + .setting { margin-top:12px; }
+.habits-setting { padding:16px; margin-bottom:14px; }
+.habits-setting h3 { margin:0 0 15px; font-size:14px; }
+.habits-setting .hint { font-size:12px; line-height:1.6; }
+.pet-name-form { display:flex; align-items:end; gap:10px; }
+.pet-name-form label { flex:1; min-width:0; font-size:12px; }
+.pet-name-form button { flex:none; padding:10px 12px; }
+.nickname-hint { display:flex; align-items:start; gap:8px; margin:8px 0 0; }
+.nickname-hint span { flex:1; }
+.nickname-hint output { flex:none; font-variant-numeric:tabular-nums; }
+.habit-status { margin:7px 0 0; overflow-wrap:anywhere; }
+.habit-status:empty { display:none; }
+.habit-status.failure { color:#b54d45; }
+.habit-toggle { display:flex; align-items:center; justify-content:space-between; gap:15px; padding-top:16px; margin-top:16px; border-top:1px solid var(--line); cursor:pointer; }
+.habit-toggle span { flex:1; min-width:0; }
+.habit-toggle strong { display:block; font-size:13px; }
+.habit-toggle small { display:block; font-size:12px; line-height:1.6; font-weight:normal; color:var(--muted); margin-top:5px; }
+.habit-toggle input { width:18px; height:18px; flex:none; margin:0; accent-color:var(--blue); }
+.roaming-options { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+.roaming-options label { font-size:12px; }
+.home-controls { display:flex; align-items:center; gap:12px; margin-top:14px; }
+.home-controls button { flex:none; }
+.home-controls .hint { margin:0; font-size:12px; }
+.habits-setting :disabled { cursor:wait; opacity:.6; }
+.habits-setting select:disabled { cursor:default; }
 .size-setting { margin:12px 0; padding:15px; }
 .size-heading { display:flex; justify-content:space-between; align-items:center; }
 .size-heading output { color:var(--blue); font-size:18px; font-weight:800; }
@@ -146,6 +171,7 @@ input::placeholder { color:#b8a698; }
 .focus-inputs { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
 .focus-card .hint { margin-bottom:0; }
 .journal-totals { padding:12px; border-radius:12px; background:#f6e9d8; line-height:1.8; font-size:13px; white-space:pre-line; }
+#journal-title { overflow-wrap:anywhere; }
 .badge-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
 .badge { padding:12px; border:1px dashed var(--line); border-radius:14px; background:#f4eee7; color:#958170; }
 .badge.earned { border-style:solid; border-color:#dfc089; background:#fff6df; color:var(--ink); }

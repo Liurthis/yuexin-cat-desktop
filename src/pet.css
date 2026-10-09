@@ -47,6 +47,11 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .companion-buttons button { flex:1; min-width:0; padding:6px 2px; border:1px solid #ead7c1; border-radius:8px; background:#fffdf8; color:#493227; font:600 13px/18px "Microsoft YaHei",sans-serif; cursor:pointer; }
 .companion-buttons button:hover { background:#f5e6d2; }
 .companion-buttons button:disabled { opacity:.5; cursor:default; }
+.habit-buttons { margin-top:5px; }
+.habit-buttons button { font-size:12px; }
+.habit-buttons button[aria-pressed=true] { background:#e8edf8; border-color:#b9c8e9; color:#315eb5; }
+.companion-heading strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.companion-heading button { flex:none; }
 #companion-status { margin:7px 0 0; font-size:12px; line-height:17px; color:#614737; }
 .companion-menu.compact { padding:6px; border-radius:12px; }
 .companion-menu.compact .companion-heading strong { font-size:13px; }
@@ -101,6 +106,8 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .pet.phone .idle, .pet.custom .idle { visibility: hidden; }
 .pet.phone .phone { visibility: visible; animation: phone 2s ease-in-out infinite; }
 .pet.dragging .idle { transform: rotate(-3deg); }
+.pet.walking:not(.custom) .idle { animation:walking-step .5s ease-in-out infinite; }
+.pet.walk-left .cat { scale:-1 1; }
 .custom-animation { filter: none; }
 .effect { position: absolute; top: 27px; right: 5px; font-size: 23px; pointer-events: none; opacity: 0; }
 .pet.performing .effect { animation: effect 1.5s ease-out infinite; }
@@ -110,6 +117,7 @@ body.over-pet .dock { opacity: 1; }
 .dock button:hover { background: #f7e8d5; }
 .dock button.usage { font-size: 12px; font-weight: 800; color: #305fba; width: 49px; }
 @keyframes breathe { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes walking-step { 0%,100% { transform:translateY(0) rotate(-1.2deg); } 50% { transform:translateY(-2px) rotate(1.2deg); } }
 @keyframes hop { 0%,100% { transform: translateY(0); } 45% { transform: translateY(-22px); } }
 @keyframes wiggle { 0%,100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
 @keyframes phone { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }

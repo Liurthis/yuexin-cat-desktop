@@ -60,8 +60,8 @@ function daySummary(day) {
 function journalView(journal) {
   return { days: journal.days.map((day) => ({ ...day, summary: daySummary(day) })), totals: { ...journal.totals }, badges: BADGES.map(({ check, ...badge }) => ({ ...badge, earnedAt: journal.badges.find((entry) => entry.id === badge.id)?.at || null })) };
 }
-function journalText(journal) {
+function journalText(journal, petName = '月薪喵') {
   const view = journalView(journal);
-  return ['月薪喵的陪伴日记', '', ...view.days.flatMap((day) => [day.date, day.summary, ...day.entries.map((entry) => new Date(entry.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) + '  ' + entry.text), '']), '纪念章', ...view.badges.filter((badge) => badge.earnedAt).map((badge) => badge.emoji + ' ' + badge.name)].join('\r\n');
+  return [petName + '的陪伴日记', '', ...view.days.flatMap((day) => [day.date, day.summary, ...day.entries.map((entry) => new Date(entry.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) + '  ' + entry.text), '']), '纪念章', ...view.badges.filter((badge) => badge.earnedAt).map((badge) => badge.emoji + ' ' + badge.name)].join('\r\n');
 }
 module.exports = { RETAIN_DAYS, normalizeJournal, recordJournal, journalView, journalText };

@@ -10,6 +10,12 @@ let interactionImageSignature;
 let focusPending = false;
 let actionSignature;
 let journalSignature;
+const petNameInput = document.getElementById('pet-name');
+let petNameDirty = false;
+let petNamePending = false;
+let roamingPending = false;
+let quietPending = false;
+let homePending = false;
 
 function selectTab(name) {
   tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === name));
@@ -67,6 +73,8 @@ function renderLimits(limits) {
 
 function render(state) {
   currentState = state;
+  renderIdentity(state.petName);
+  renderHabits(state);
   renderReminders(state.reminders);
   renderLimits(state.limits);
   document.getElementById('always-on-top').checked = state.alwaysOnTop;
@@ -84,12 +92,110 @@ function render(state) {
 window.yuexin.onState(render);
 window.yuexin.getState().then(render);
 
+function petName() {
+  return currentState?.petName || '月薪喵';
+}
+
+function renderIdentity(name = '月薪喵') {
+  document.getElementById('pet-home-title').textContent = name + '的小窝';
+  document.getElementById('journal-title').textContent = name + '的陪伴日记';
+  document.title = name + '的小窝';
+}
+
+function habitStatus(id, text, failure = false) {
+  const status = document.getElementById(id);
+  status.textContent = text;
+  status.classList.toggle('failure', failure);
+}
+
+function renderHabits(state) {
+  if (!petNameDirty && !petNamePending && document.activeElement !== petNameInput) petNameInput.value = state.petName || '月薪喵';
+  document.getElementById('pet-name-count').textContent = Array.from(petNameInput.value).length + ' / 12';
+  petNameInput.disabled = petNamePending;
+  document.getElementById('save-pet-name').disabled = petNamePending;
+  const roaming = state.roaming || { enabled: false, intervalSeconds: 300, speed: 'slow', isWalking: false };
+  const enabled = document.getElementById('roaming-enabled');
+  const interval = document.getElementById('roaming-interval');
+  const speed = document.getElementById('roaming-speed');
+  if (!roamingPending) {
+    enabled.checked = roaming.enabled;
+    interval.value = roaming.intervalSeconds;
+    speed.value = roaming.speed;
+  }
+  enabled.disabled = roamingPending;
+  interval.disabled = roamingPending;
+  speed.disabled = roamingPending;
+  document.getElementById('call-home').disabled = homePending;
+  document.getElementById('roaming-state').textContent = roaming.isWalking ? '正在附近散步～' : roaming.awayFromHome ? '等互动结束，再回小窝' : state.quietMode ? '安静陪在小窝里' : roaming.enabled ? '等空闲时走走' : '在小窝里陪你';
+  const quiet = document.getElementById('quiet-mode');
+  if (!quietPending) quiet.checked = Boolean(state.quietMode);
+  quiet.disabled = quietPending;
+}
+
+petNameInput.oninput = (event = {}) => {
+  petNameDirty = true;
+  const characters = Array.from(petNameInput.value);
+  if (!event.isComposing && characters.length > 12) petNameInput.value = characters.slice(0, 12).join('');
+  document.getElementById('pet-name-count').textContent = Array.from(petNameInput.value).length + ' / 12';
+  habitStatus('pet-name-status', '');
+};
+petNameInput.oncompositionend = () => petNameInput.oninput();
+document.getElementById('pet-name-form').onsubmit = async (event) => {
+  event.preventDefault();
+  if (!currentState || petNamePending) return;
+  const draft = petNameInput.value.trim();
+  if (Array.from(draft).length > 12) { habitStatus('pet-name-status', '昵称最多 12 个字或表情。', true); return; }
+  petNamePending = true; renderHabits(currentState); habitStatus('pet-name-status', '');
+  try {
+    const saved = await window.yuexin.setPetName(draft);
+    currentState.petName = typeof saved === 'string' && saved ? saved : draft || '月薪喵';
+    petNameDirty = false;
+    petNameInput.value = currentState.petName;
+    renderIdentity(currentState.petName);
+    renderFocus(currentState.focus);
+    habitStatus('pet-name-status', '昵称已保存，现在叫它“' + currentState.petName + '”。');
+  } catch (error) { habitStatus('pet-name-status', error.message, true); }
+  finally { petNamePending = false; renderHabits(currentState); }
+};
+
+async function changeRoaming(patch) {
+  if (!currentState || roamingPending) return;
+  roamingPending = true; renderHabits(currentState); habitStatus('roaming-status', '');
+  try {
+    await window.yuexin.setRoaming(patch);
+    currentState.roaming = { ...currentState.roaming, ...patch };
+    habitStatus('roaming-status', patch.enabled === false ? '已关闭自动散步。' : currentState.quietMode && currentState.roaming.enabled ? '习惯已保存，关闭安静陪伴后会再出门走走。' : '散步习惯已保存。');
+  } catch (error) { habitStatus('roaming-status', error.message, true); }
+  finally { roamingPending = false; renderHabits(currentState); }
+}
+document.getElementById('roaming-enabled').onchange = (event) => changeRoaming({ enabled: event.target.checked });
+document.getElementById('roaming-interval').onchange = (event) => changeRoaming({ intervalSeconds: Number(event.target.value) });
+document.getElementById('roaming-speed').onchange = (event) => changeRoaming({ speed: event.target.value });
+document.getElementById('quiet-mode').onchange = async (event) => {
+  if (!currentState || quietPending) return;
+  const enabled = event.target.checked;
+  quietPending = true; renderHabits(currentState); habitStatus('quiet-mode-status', '');
+  try {
+    await window.yuexin.setQuietMode(enabled);
+    currentState.quietMode = enabled;
+    habitStatus('quiet-mode-status', enabled ? '已开启安静陪伴，提醒仍会正常显示。' : '已恢复平时的陪伴习惯。');
+  } catch (error) { habitStatus('quiet-mode-status', error.message, true); }
+  finally { quietPending = false; renderHabits(currentState); }
+};
+document.getElementById('call-home').onclick = async () => {
+  if (!currentState || homePending) return;
+  homePending = true; renderHabits(currentState); habitStatus('roaming-status', '');
+  try { await window.yuexin.callHome(); habitStatus('roaming-status', '已经叫它回小窝了。'); }
+  catch (error) { habitStatus('roaming-status', error.message, true); }
+  finally { homePending = false; renderHabits(currentState); }
+};
+
 function renderFocus(focus) {
   if (!focus) return;
   const session = focus.session;
   const seconds = Math.max(0, Math.ceil((session?.remainingMs ?? focus.settings.minutes * 60000) / 1000));
   document.getElementById('panel-focus-countdown').textContent = String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
-  document.getElementById('panel-focus-heading').textContent = session ? (session.phase === 'focus' ? '月薪喵正在陪你专注' : '一起休息一下') + (session.status === 'paused' ? ' · 已暂停' : '') : '准备开始';
+  document.getElementById('panel-focus-heading').textContent = session ? (session.phase === 'focus' ? petName() + '正在陪你专注' : '一起休息一下') + (session.status === 'paused' ? ' · 已暂停' : '') : '准备开始';
   document.getElementById('panel-focus-fill').style.width = (session?.progress || 0) + '%';
   document.getElementById('panel-focus-meter').setAttribute('aria-valuenow', session?.progress || 0);
   const main = document.getElementById('panel-focus-main');
@@ -391,7 +497,7 @@ document.getElementById('chat-form').onsubmit = async (event) => {
   const input = document.getElementById('chat-input'); const send = document.getElementById('chat-send');
   const text = input.value.trim(); if (!text || send.disabled) return;
   addMessage(text, 'user-message'); input.value = ''; send.disabled = true;
-  streaming = addMessage('月薪喵正在想…', 'cat-message');
+  streaming = addMessage(petName() + '正在想…', 'cat-message');
   try { streaming.textContent = await window.yuexin.sendChat(text); }
   catch (error) { streaming.textContent = `喵，连接失败了：${error.message}`; }
   finally { streaming = null; send.disabled = false; input.focus(); history.scrollTop = history.scrollHeight; }

@@ -15,6 +15,9 @@ const { normalizeCompanion, advanceCompanion, companionView, interactCompanion, 
 const { normalizeFocus, startFocus, tickFocus, toggleFocus, focusView } = require('./focus');
 const { normalizeJournal, recordJournal, journalView, journalText } = require('./journal');
 const { normalizeTags } = require('./action-context');
+const { normalizePetName } = require('./pet-profile');
+const { normalizeRoaming, createWalkPlan, createReturnPlan, sampleWalk } = require('./roaming');
+const { performance } = require('node:perf_hooks');
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'yuexin-asset', privileges: { standard: true, secure: true, corsEnabled: true, supportFetchAPI: true } }]);
 
@@ -33,6 +36,16 @@ let feedingBusy = false;
 let feedingEndTimer;
 let playSession = null;
 let lastFocusSave = 0;
+let walkSession = null;
+let walkDirection = 1;
+let nextWalkAt = 0;
+let petBusy = false;
+let petMenuBusy = false;
+let lastPetInput = 0;
+let placingPet = false;
+let automaticPosition = null;
+let pendingReturn = false;
+let returnReadyAt = 0;
 const startupName = '月薪喵桌宠';
 
 function loginOptions() {
@@ -64,6 +77,8 @@ function loadState() {
     return {
       reminders: Array.isArray(loaded.reminders) ? loaded.reminders : [],
       petPosition: loaded.petPosition || null,
+      petName: normalizePetName(loaded.petName), quietMode: loaded.quietMode === true,
+      roaming: normalizeRoaming(loaded.roaming),
       alwaysOnTop: loaded.alwaysOnTop !== false,
       petScale: normalizeScale(loaded.petScale ?? 1),
       idleAnimations: loaded.idleAnimations !== false,
@@ -76,7 +91,7 @@ function loadState() {
       focus: normalizeFocus(loaded.focus), journal: normalizeJournal(loaded.journal),
     };
   } catch {
-    return { reminders: [], petPosition: null, alwaysOnTop: true, petScale: 1, idleAnimations: true, randomInterval: 30, bundledActionsVersion: 0, codexPath: null, customActions: [], feeding: normalizeFeeding(), companion: normalizeCompanion(), focus: normalizeFocus(), journal: normalizeJournal() };
+    return { reminders: [], petPosition: null, petName: normalizePetName(), quietMode: false, roaming: normalizeRoaming(), alwaysOnTop: true, petScale: 1, idleAnimations: true, randomInterval: 30, bundledActionsVersion: 0, codexPath: null, customActions: [], feeding: normalizeFeeding(), companion: normalizeCompanion(), focus: normalizeFocus(), journal: normalizeJournal() };
   }
 }
 
@@ -88,7 +103,115 @@ function saveState() {
 }
 
 function publicState() {
-  return { reminders: state.reminders, alwaysOnTop: state.alwaysOnTop, autoStart: getAutoStart(), petScale: state.petScale, idleAnimations: state.idleAnimations, randomInterval: state.randomInterval, customActions: state.customActions, feeding: { satiety: state.feeding.satiety, isEating: feedingBusy, foods: FOODS, image: feedingImage(), duration: state.feeding.duration }, companion: companionView(state.companion), focus: focusView(state.focus), journal: journalView(state.journal), limits };
+  return { reminders: state.reminders, petName: state.petName, quietMode: state.quietMode, roaming: roamingView(), alwaysOnTop: state.alwaysOnTop, autoStart: getAutoStart(), petScale: state.petScale, idleAnimations: state.idleAnimations, randomInterval: state.randomInterval, customActions: state.customActions, feeding: { satiety: state.feeding.satiety, isEating: feedingBusy, foods: FOODS, image: feedingImage(), duration: state.feeding.duration }, companion: companionView(state.companion), focus: focusView(state.focus), journal: journalView(state.journal), limits };
+}
+
+function roamingView() {
+  const position = petWindow && !petWindow.isDestroyed() ? petWindow.getPosition() : null;
+  const home = state.petPosition;
+  const awayFromHome = Boolean(position && home && Math.hypot(position[0] - home.x, position[1] - home.y) > 2);
+  return { ...state.roaming, isWalking: Boolean(walkSession), direction: walkDirection, awayFromHome };
+}
+function delayNextWalk() {
+  lastPetInput = performance.now();
+  nextWalkAt = lastPetInput + state.roaming.intervalSeconds * 1000;
+}
+function moveAutomatically(x, y) {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  const position = normalizePetPosition(x, y);
+  if (!position) return;
+  placingPet = true;
+  try { petWindow.setPosition(...position); automaticPosition = petWindow.getPosition(); }
+  finally { placingPet = false; }
+}
+function restoreHome() {
+  if (!state || !petWindow || petWindow.isDestroyed()) return;
+  pendingReturn = false;
+  returnReadyAt = 0;
+  const bounds = petWindow.getBounds();
+  const home = state.petPosition || bounds;
+  const area = screen.getDisplayMatching({ ...bounds, x: home.x, y: home.y }).workArea;
+  const position = normalizePetPosition(
+    Math.max(area.x, Math.min(home.x, area.x + Math.max(0, area.width - bounds.width))),
+    Math.max(area.y, Math.min(home.y, area.y + Math.max(0, area.height - bounds.height))),
+  );
+  if (!position) return;
+  moveAutomatically(...position);
+  if (!state.petPosition || state.petPosition.x !== position[0] || state.petPosition.y !== position[1]) {
+    state.petPosition = { x: position[0], y: position[1] }; saveState();
+  }
+}
+function emitWalk(active) {
+  petWindow?.webContents.send('pet:walk', { active, direction: walkDirection });
+}
+function stopWalking(returnHome = false) {
+  if (!state) return;
+  const wasWalking = Boolean(walkSession);
+  if (!wasWalking && !returnHome) return;
+  pendingReturn = wasWalking && !returnHome;
+  returnReadyAt = pendingReturn ? performance.now() + 5000 : 0;
+  walkSession = null; delayNextWalk();
+  if (returnHome) restoreHome();
+  if (wasWalking) { emitWalk(false); broadcastState(); }
+}
+function callHome() {
+  stopWalking(); delayNextWalk(); restoreHome(); petWindow?.show(); broadcastState();
+  return roamingView();
+}
+function canWalk() {
+  return petWindow && !petWindow.isDestroyed() && petWindow.isVisible() && !petDragging && !feedingBusy && !playSession && !state.companion.sleeping && !state.quietMode && !(state.focus.session?.phase === 'focus' && state.focus.session.status === 'running');
+}
+function startWalking(automatic = false) {
+  if (walkSession) return roamingView();
+  if (!canWalk()) {
+    if (!automatic) throw new Error('等吃完、睡醒或结束专注，再出去走走吧～');
+    return roamingView();
+  }
+  const bounds = petWindow.getBounds();
+  const plan = createWalkPlan(bounds, screen.getDisplayMatching(bounds).workArea, state.roaming, performance.now());
+  if (!plan) {
+    delayNextWalk();
+    if (!automatic) throw new Error('这里的空间有点小，先把我拖到宽敞一点的地方吧～');
+    return roamingView();
+  }
+  walkSession = plan;
+  walkDirection = plan.target.x < plan.origin.x ? -1 : 1;
+  emitWalk(true); broadcastState();
+  return roamingView();
+}
+function tickWalking() {
+  if (!walkSession) return;
+  if (!canWalk() || petBusy) { stopWalking(); return; }
+  try {
+    const step = sampleWalk(walkSession, performance.now());
+    if (!step) { stopWalking(true); return; }
+    moveAutomatically(step.x, step.y);
+    if (step.direction !== walkDirection) { walkDirection = step.direction; emitWalk(true); }
+    if (step.done) stopWalking(true);
+  } catch (error) { stopWalking(); console.warn('月薪喵暂停散步：', error.message); }
+}
+function checkAutoWalk() {
+  if (pendingReturn && !walkSession && canWalk() && !petBusy && !panelWindow?.isVisible() && performance.now() >= returnReadyAt && performance.now() - lastPetInput >= 5000) {
+    const bounds = petWindow.getBounds();
+    const cursor = screen.getCursorScreenPoint();
+    if (cursor.x >= bounds.x - 24 && cursor.x <= bounds.x + bounds.width + 24 && cursor.y >= bounds.y - 24 && cursor.y <= bounds.y + bounds.height + 24) return;
+    const plan = createReturnPlan(bounds, state.petPosition, screen.getDisplayMatching(bounds).workArea, state.roaming, performance.now());
+    pendingReturn = false;
+    if (plan) { walkSession = plan; walkDirection = plan.target.x < plan.origin.x ? -1 : 1; emitWalk(true); broadcastState(); }
+    else { restoreHome(); broadcastState(); }
+    return;
+  }
+  if (!state.roaming.enabled || walkSession || performance.now() < nextWalkAt || performance.now() - lastPetInput < 20000 || petBusy || !canWalk() || panelWindow?.isVisible() || roamingView().awayFromHome) return;
+  const cursor = screen.getCursorScreenPoint();
+  const bounds = petWindow.getBounds();
+  if (cursor.x >= bounds.x - 24 && cursor.x <= bounds.x + bounds.width + 24 && cursor.y >= bounds.y - 24 && cursor.y <= bounds.y + bounds.height + 24) return;
+  startWalking(true);
+}
+function setQuietMode(enabled) {
+  state.quietMode = Boolean(enabled);
+  if (state.quietMode) stopWalking(true);
+  delayNextWalk(); saveState(); updateTray(); broadcastState();
+  return state.quietMode;
 }
 
 function feedingImage() {
@@ -124,12 +247,13 @@ function refreshFocus() {
   if (result.event) {
     const event = result.event;
     if (event.kind === 'focus') {
+      stopWalking();
       event.reward = rewardFocus(state.companion, state.feeding.satiety, now);
       recordJournal(state.journal, 'focus', event, state.companion, now);
     }
     saveState(); lastFocusSave = now; broadcastState();
     petWindow?.webContents.send('focus:finished', event);
-    const notification = new Notification({ title: '月薪喵陪你专注', body: event.kind === 'focus' ? `完成 ${event.minutes} 分钟专注，休息 ${event.breakMinutes} 分钟吧～` : '休息结束啦，准备好了再开始下一段吧～', icon: path.join(__dirname, '..', 'assets', 'yuexin-idle.png') });
+    const notification = new Notification({ title: state.petName + '陪你专注', body: event.kind === 'focus' ? `完成 ${event.minutes} 分钟专注，休息 ${event.breakMinutes} 分钟吧～` : '休息结束啦，准备好了再开始下一段吧～', silent: state.quietMode, icon: path.join(__dirname, '..', 'assets', 'yuexin-idle.png') });
     notification.on('click', showQuickFocus); notification.show();
   } else {
     if (now - lastFocusSave >= 15000) { saveState(); lastFocusSave = now; }
@@ -142,10 +266,12 @@ function pauseFocusForSystem() {
   if (state.focus.session?.status === 'running') { toggleFocus(state.focus); saveState(); broadcastState(); }
 }
 function showQuickFocus() {
+  stopWalking();
   petWindow?.show(); petWindow?.webContents.send('focus:openMenu');
 }
 
 function showCompanion() {
+  stopWalking();
   petWindow?.show();
   petWindow?.webContents.send('companion:openMenu');
 }
@@ -196,10 +322,11 @@ async function refreshLimits() {
 }
 
 function showPanel(tab = 'reminders') {
+  stopWalking();
   if (!panelWindow || panelWindow.isDestroyed()) {
     panelWindow = new BrowserWindow({
       width: 430, height: 620, minWidth: 380, minHeight: 520,
-      title: '月薪喵的小窝', backgroundColor: '#fffaf5',
+      title: state.petName + '的小窝', backgroundColor: '#fffaf5',
       autoHideMenuBar: true,
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
@@ -211,7 +338,8 @@ function showPanel(tab = 'reminders') {
       panelWindow.webContents.send('state:changed', publicState());
       panelWindow.webContents.send('panel:tab', tab);
     });
-    panelWindow.on('closed', () => { panelWindow = null; });
+    panelWindow.on('hide', () => { if (pendingReturn) returnReadyAt = performance.now() + 5000; });
+    panelWindow.on('closed', () => { panelWindow = null; if (pendingReturn) returnReadyAt = performance.now() + 5000; });
   } else {
     panelWindow.show();
     panelWindow.focus();
@@ -220,6 +348,7 @@ function showPanel(tab = 'reminders') {
 }
 
 function showQuickFeeding() {
+  stopWalking();
   if (!petWindow || petWindow.isDestroyed()) return;
   petWindow.show();
   petWindow.webContents.send('feeding:openMenu');
@@ -243,6 +372,8 @@ function createPet() {
     },
   });
   petWindow.setMenu(null);
+  const initialPosition = petWindow.getPosition();
+  state.petPosition = { x: initialPosition[0], y: initialPosition[1] }; saveState();
   petWindow.setIgnoreMouseEvents(true, { forward: true });
   let samplingPixel = false;
   const pointerTimer = setInterval(() => {
@@ -270,11 +401,14 @@ function createPet() {
   petWindow.loadFile(path.join(__dirname, 'pet.html'));
   petWindow.webContents.once('did-finish-load', () => { broadcastState(); petWindow.webContents.send('pet:greeting'); });
   petWindow.webContents.on('context-menu', () => {
+    stopWalking();
     Menu.buildFromTemplate([
       { label: '打开小窝', click: () => showPanel() },
       { label: '添加提醒', click: () => showPanel('reminders') },
       { label: '喂月薪喵吃东西', click: showQuickFeeding },
       { label: '摸摸 / 逗猫 / 睡觉', click: showCompanion },
+      { label: '叫它回小窝', click: callHome },
+      { label: '安静陪伴', type: 'checkbox', checked: state.quietMode, click: (item) => setQuietMode(item.checked) },
       { label: '一起专注', click: showQuickFocus },
       { label: '陪伴日记', click: () => showPanel('journal') },
       { label: '选择 / 添加动作', click: () => showPanel('actions') },
@@ -288,11 +422,14 @@ function createPet() {
   petWindow.on('move', () => {
     if (!petWindow || petWindow.isDestroyed()) return;
     const [x, y] = petWindow.getPosition();
+    if (placingPet || walkSession || (automaticPosition && automaticPosition[0] === x && automaticPosition[1] === y)) return;
+    automaticPosition = null;
     state.petPosition = { x, y };
     clearTimeout(positionSaveTimer);
     positionSaveTimer = setTimeout(() => { positionSaveTimer = null; saveState(); }, 250);
   });
   petWindow.on('closed', () => {
+    walkSession = null;
     clearInterval(pointerTimer);
     if (positionSaveTimer) { clearTimeout(positionSaveTimer); saveState(); }
     petWindow = null;
@@ -302,10 +439,17 @@ function createPet() {
 function createTray() {
   const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'yuexin-idle.png')).resize({ width: 24, height: 24 });
   tray = new Tray(icon);
-  tray.setToolTip('月薪喵桌宠');
+  updateTray();
+  tray.on('double-click', () => showPanel());
+}
+function updateTray() {
+  if (!tray) return;
+  tray.setToolTip(state.petName + '桌宠');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开小窝', click: () => showPanel() },
     { label: '显示月薪喵', click: () => petWindow?.show() },
+    { label: '叫它回小窝', click: callHome },
+    { label: '安静陪伴', type: 'checkbox', checked: state.quietMode, click: (item) => setQuietMode(item.checked) },
     { label: '喂月薪喵', click: showQuickFeeding },
     { label: '陪月薪喵玩', click: showCompanion },
     { label: '一起专注', click: showQuickFocus },
@@ -314,13 +458,13 @@ function createTray() {
     { type: 'separator' },
     { label: '退出', click: () => app.quit() },
   ]));
-  tray.on('double-click', () => showPanel());
 }
 
 function fireReminder(reminder) {
+  stopWalking();
   playSession = null;
   const notification = new Notification({
-    title: '月薪喵提醒你', body: reminder.title,
+    title: state.petName + '提醒你', body: reminder.title, silent: state.quietMode,
     icon: path.join(__dirname, '..', 'assets', 'yuexin-idle.png'),
   });
   notification.on('click', () => showPanel('reminders'));
@@ -346,14 +490,41 @@ function registerIpc() {
   ipcMain.handle('state:get', () => { refreshSatiety(); refreshFocus(); return publicState(); });
   const fromPet = (event) => { if (event.sender !== petWindow?.webContents) throw new Error('请从桌宠发起互动'); };
   const fromApp = (event) => { if (event.sender !== petWindow?.webContents && event.sender !== panelWindow?.webContents) throw new Error('请从月薪喵的界面操作'); };
+  ipcMain.handle('settings:petName', (event, name) => {
+    fromApp(event); state.petName = normalizePetName(name);
+    panelWindow?.setTitle(state.petName + '的小窝');
+    saveState(); updateTray(); broadcastState(); return state.petName;
+  });
+  ipcMain.handle('settings:quietMode', (event, enabled) => { fromApp(event); return setQuietMode(enabled); });
+  ipcMain.handle('settings:roaming', (event, input) => {
+    fromApp(event); state.roaming = normalizeRoaming({ ...state.roaming, ...input });
+    if (!state.roaming.enabled) stopWalking(true);
+    delayNextWalk(); saveState(); broadcastState(); return roamingView();
+  });
+  ipcMain.handle('roaming:toggle', (event) => {
+    fromPet(event);
+    if (walkSession || roamingView().awayFromHome) return callHome();
+    return startWalking();
+  });
+  ipcMain.handle('roaming:home', (event) => { fromApp(event); return callHome(); });
+  ipcMain.on('pet:busy', (event, input) => {
+    if (event.sender !== petWindow?.webContents) return;
+    const menu = input?.menu === true;
+    if (menu && !petMenuBusy) delayNextWalk();
+    const wasBusy = petBusy;
+    petMenuBusy = menu; petBusy = input?.busy === true;
+    if (petBusy) stopWalking();
+    else if (wasBusy && pendingReturn) returnReadyAt = performance.now() + 5000;
+  });
   ipcMain.handle('focus:start', (event, input) => {
     fromApp(event); refreshFocus();
     startFocus(state.focus, input, Date.now(), crypto.randomUUID());
+    stopWalking(); delayNextWalk();
     playSession = null; saveState(); lastFocusSave = Date.now(); broadcastState();
     return focusView(state.focus);
   });
   ipcMain.handle('focus:toggle', (event) => {
-    fromApp(event); refreshFocus(); toggleFocus(state.focus); saveState(); broadcastState(); return focusView(state.focus);
+    fromApp(event); refreshFocus(); toggleFocus(state.focus); stopWalking(); delayNextWalk(); saveState(); broadcastState(); return focusView(state.focus);
   });
   ipcMain.handle('focus:end', (event) => {
     fromApp(event); refreshFocus(); state.focus.session = null; saveState(); broadcastState(); return focusView(state.focus);
@@ -365,18 +536,20 @@ function registerIpc() {
     if (event.sender !== panelWindow?.webContents) throw new Error('请从日记页导出');
     const result = await dialog.showSaveDialog(panelWindow, { title: '保存月薪喵的陪伴日记', defaultPath: '月薪喵的陪伴日记.txt', filters: [{ name: '文本日记', extensions: ['txt'] }] });
     if (result.canceled) return false;
-    fs.writeFileSync(result.filePath, '\ufeff' + journalText(state.journal), 'utf8'); return true;
+    fs.writeFileSync(result.filePath, '\ufeff' + journalText(state.journal, state.petName), 'utf8'); return true;
   });
   ipcMain.handle('companion:pet', (event) => {
     fromPet(event);
     if (playSession && Date.now() > playSession.expiresAt) playSession = null;
     if (feedingBusy || playSession) throw new Error('等吃完或玩完，再来摸摸吧～');
+    stopWalking(); delayNextWalk();
     refreshSatiety();
     return notifyInteraction(interactCompanion(state.companion, 'petting', state.feeding.satiety));
   });
   ipcMain.handle('companion:sleep', (event, sleeping) => {
     fromPet(event);
     if (feedingBusy) throw new Error('先吃完再休息吧～');
+    stopWalking(); delayNextWalk();
     refreshSatiety();
     playSession = null;
     setSleeping(state.companion, sleeping, state.feeding.satiety);
@@ -395,6 +568,7 @@ function registerIpc() {
     const now = Date.now();
     if (companionView(state.companion).cooldownUntil.play > now) throw new Error('刚玩过啦，休息一会儿再玩～');
     if (playSession && now < playSession.expiresAt) throw new Error('小球已经准备好啦');
+    stopWalking(); delayNextWalk();
     playSession = { token: crypto.randomUUID(), startedAt: now, expiresAt: now + 15000, hits: 0, lastHit: 0 };
     return { token: playSession.token, duration: 12000 };
   });
@@ -414,6 +588,7 @@ function registerIpc() {
     if (event.sender !== panelWindow?.webContents && event.sender !== petWindow?.webContents) throw new Error('请从桌宠的喂食选项选择食物');
     if (feedingBusy) throw new Error('还在吃呢，等吃完再喂吧～');
     if (!petWindow || petWindow.isDestroyed()) throw new Error('桌宠还没有准备好');
+    stopWalking(); delayNextWalk();
     refreshSatiety();
     const previousSatiety = state.feeding.satiety;
     const result = feedPet(state.feeding, foodId);
@@ -464,12 +639,15 @@ function registerIpc() {
   ipcMain.on('pet:dragging', (event, dragging) => {
     if (event.sender !== petWindow?.webContents) return;
     petDragging = Boolean(dragging);
+    if (petDragging) { stopWalking(); delayNextWalk(); }
     if (petDragging) setPetInteractive(true);
   });
   ipcMain.on('pet:setPosition', (event, x, y) => {
     if (!petWindow || petWindow.isDestroyed() || event.sender !== petWindow.webContents) return;
     const position = normalizePetPosition(x, y);
     if (!position) return;
+    pendingReturn = false;
+    automaticPosition = null;
     try { petWindow.setPosition(...position); }
     catch (error) { console.warn('月薪喵拖拽位置更新失败：', error.message); }
   });
@@ -525,6 +703,7 @@ function registerIpc() {
     return setAutoStart(enabled);
   });
   ipcMain.handle('settings:scale', (_event, value) => {
+    stopWalking(true); automaticPosition = null;
     state.petScale = normalizeScale(value);
     if (petWindow && !petWindow.isDestroyed()) {
       const previous = petWindow.getBounds();
@@ -644,13 +823,18 @@ app.whenReady().then(() => {
   registerIpc();
   createPet();
   createTray();
+  delayNextWalk();
+  setInterval(tickWalking, 40);
+  setInterval(checkAutoWalk, 1000);
   setInterval(checkReminders, 15000);
   setInterval(refreshLimits, 120000);
   setInterval(refreshSatiety, 60000);
   setInterval(refreshFocus, 1000);
-  powerMonitor.on('suspend', pauseFocusForSystem);
-  powerMonitor.on('lock-screen', pauseFocusForSystem);
+  powerMonitor.on('suspend', () => { stopWalking(true); pauseFocusForSystem(); });
+  powerMonitor.on('lock-screen', () => { stopWalking(true); pauseFocusForSystem(); });
+  screen.on('display-removed', () => { stopWalking(true); restoreHome(); });
+  screen.on('display-metrics-changed', () => { stopWalking(true); restoreHome(); });
   checkReminders();
   refreshLimits();
 });
-app.on('before-quit', () => { pauseFocusForSystem(); codex.stop(); });
+app.on('before-quit', () => { stopWalking(true); pauseFocusForSystem(); codex.stop(); });
