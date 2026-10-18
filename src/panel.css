@@ -45,6 +45,23 @@ input::placeholder { color:#b8a698; }
 .reminder small { display:block; margin-top:3px; color:var(--muted); font-size:10px; }
 .reminder button { border:0; background:transparent; padding:6px; color:#8f7160; font-size:14px; }
 .reminder button:hover { color:#ad423b; }
+.reminder button:disabled { color:var(--muted); cursor:default; }
+.reminder-inbox { display:grid; gap:10px; margin-bottom:10px; }
+.inbox-group { padding:12px; }
+.inbox-group > summary { cursor:pointer; color:#74543c; font-size:13px; font-weight:700; line-height:22px; }
+.inbox-group.pending { border-color:#dec392; background:#fffbf2; }
+.inbox-list { display:grid; gap:9px; margin-top:10px; }
+.inbox-alert { padding-top:10px; border-top:1px solid var(--line); }
+.inbox-alert:first-child { padding-top:0; border-top:0; }
+.inbox-alert strong { display:block; font-size:13px; line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; }
+.inbox-alert small { display:block; color:var(--muted); font-size:12px; line-height:1.6; margin-top:3px; }
+.inbox-alert-controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:9px; }
+.inbox-alert-controls button { font-size:12px; padding:7px 12px; }
+.inbox-alert-controls button:disabled { cursor:wait; opacity:.55; }
+.inbox-empty { color:var(--muted); font-size:12px; margin:3px 0 0; line-height:1.6; }
+#reminder-inbox-status { font-size:12px; overflow-wrap:anywhere; }
+#reminder-inbox-status:empty { display:none; }
+.recovery-hint { padding:11px 13px; border:1px solid #cbd9bb; border-radius:12px; background:#f1f6e9; color:#4e6840; font-size:12px; }
 .empty { text-align:center; padding:24px 10px; color:#a28a79; border:1px dashed #ddc7af; border-radius:15px; background:#fffdfa; }
 .chat-card { padding:10px; }
 .chat-history { height:235px; overflow:auto; padding:8px 6px; display:flex; flex-direction:column; gap:10px; }
@@ -135,7 +152,7 @@ input::placeholder { color:#b8a698; }
 .satiety-heading output { color:#47784a; font-size:23px; font-weight:800; }
 .satiety-meter { height:13px; }
 .satiety-meter span { background:linear-gradient(90deg,#b4d89d,#599253); transition:width .3s; }
-.satiety-meter.hungry span { background:linear-gradient(90deg,#ffc48d,#df9250); }
+.satiety-meter.hungry span { background:linear-gradient(90deg,#f5a29b,#db5349); }
 .satiety-card .hint { margin-bottom:0; }
 .food-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
 .food-card { display:flex; flex-direction:column; align-items:center; gap:7px; background:#fff; color:var(--ink); padding:16px 5px; border:1px solid var(--line); border-radius:16px; }

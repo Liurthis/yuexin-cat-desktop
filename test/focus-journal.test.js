@@ -43,6 +43,50 @@ test('running sessions reopen paused, invalid settings and remaining time stay b
   assert.equal(fresh.session.breakMs, MINUTE);
 });
 
+test('explicit elapsed time keeps focus running through forward and backward wall-clock changes', () => {
+  const focus = normalizeFocus(undefined, start);
+  startFocus(focus, { minutes: 25 }, start, 'clock-change');
+  for (const wallTime of [start + 60 * MINUTE, start - 60 * MINUTE, start - 60 * MINUTE + 1000, start + 1000]) {
+    const before = focus.session.remainingMs;
+    const result = tickFocus(focus, wallTime, 1000);
+    assert.equal(result.event, undefined);
+    assert.equal(focus.session.phase, 'focus');
+    assert.equal(focus.session.remainingMs, before - 1000);
+    assert.equal(focus.session.lastTickAt, wallTime, 'persisted timestamps still use the wall clock');
+  }
+  const remaining = focus.session.remainingMs;
+  assert.equal(tickFocus(focus, start + 120 * MINUTE, 0).changed, false);
+  assert.equal(focus.session.remainingMs, remaining);
+  toggleFocus(focus, start);
+  assert.equal(tickFocus(focus, start + 120 * MINUTE, 1000).changed, false);
+  assert.equal(focus.session.remainingMs, remaining, 'explicit elapsed time does not advance paused sessions');
+});
+
+test('explicit elapsed time completes each focus and break once while preserving wall-clock event dates', () => {
+  const focus = normalizeFocus(undefined, start);
+  startFocus(focus, { minutes: 1, breakMinutes: 1 }, start, 'single-completion');
+  const focusDone = tickFocus(focus, start - MINUTE, MINUTE);
+  assert.equal(focusDone.event.kind, 'focus');
+  assert.equal(focusDone.event.at, start - MINUTE);
+  assert.equal(focus.session.phase, 'break');
+  assert.equal(focus.session.remainingMs, MINUTE);
+  assert.equal(tickFocus(focus, start + 10 * MINUTE, 0).event, undefined);
+  const breakDone = tickFocus(focus, start + 10 * MINUTE, MINUTE);
+  assert.equal(breakDone.event.kind, 'break');
+  assert.equal(breakDone.event.at, start + 10 * MINUTE);
+  assert.equal(focus.session, null);
+  assert.equal(tickFocus(focus, start + 20 * MINUTE, MINUTE).event, undefined);
+});
+
+test('missing or invalid explicit elapsed time retains legacy ticking without poisoning remaining time', () => {
+  const focus = normalizeFocus(undefined, start);
+  startFocus(focus, { minutes: 1 }, start, 'legacy-ticking');
+  for (const [i, elapsed] of [undefined, NaN, Infinity, -1000].entries()) {
+    tickFocus(focus, start + (i + 1) * 1000, elapsed);
+    assert.equal(focus.session.remainingMs, MINUTE - (i + 1) * 1000);
+  }
+});
+
 test('completed focus rewards affection under the existing daily cap without completing daily toys or feeding', () => {
   const cat = normalizeCompanion({ mood: 50 }, start);
   assert.deepEqual(rewardFocus(cat, 70, start), { moodGained: 3, bondGained: 4 });

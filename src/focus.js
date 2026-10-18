@@ -22,10 +22,10 @@ function startFocus(focus, input = {}, now = Date.now(), id = String(now)) {
   const durationMs = focus.settings.minutes * MINUTE;
   focus.session = { id, phase: 'focus', status: 'running', durationMs, remainingMs: durationMs, breakMs: focus.settings.breakMinutes * MINUTE, lastTickAt: now };
 }
-function tickFocus(focus, now = Date.now()) {
+function tickFocus(focus, now = Date.now(), elapsedMs = undefined) {
   const session = focus.session;
   if (!session || session.status !== 'running') return { changed: false };
-  const elapsed = Math.max(0, now - session.lastTickAt);
+  const elapsed = Number.isFinite(elapsedMs) && elapsedMs >= 0 ? elapsedMs : Math.max(0, now - session.lastTickAt);
   session.lastTickAt = now;
   if (!elapsed && session.remainingMs > 0) return { changed: false };
   session.remainingMs = Math.max(0, session.remainingMs - elapsed);

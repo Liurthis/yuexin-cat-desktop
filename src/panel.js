@@ -8,6 +8,10 @@ let feedPending = false;
 let feedingImageSignature;
 let interactionImageSignature;
 let focusPending = false;
+let focusError = '';
+let reminderSubmitPending = false;
+const reminderInboxPending = new Set();
+let reminderInboxSignature;
 let actionSignature;
 let journalSignature;
 const petNameInput = document.getElementById('pet-name');
@@ -18,6 +22,7 @@ let quietPending = false;
 let homePending = false;
 
 function selectTab(name) {
+  if (name !== 'focus' && focusError) { focusError = ''; if (currentState) renderFocus(currentState.focus); }
   tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === name));
   pages.forEach((page) => page.classList.toggle('active', page.id === name));
 }
@@ -32,16 +37,64 @@ function renderReminders(items) {
   list.replaceChildren();
   if (!items.length) { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = '还没有提醒，给月薪喵安排一个吧～'; list.append(empty); return; }
   items.forEach((item) => {
+    const expired = item.repeat !== 'daily' && !item.enabled && Number(item.nextAt) <= Date.now();
     const card = document.createElement('div'); card.className = `card reminder${item.enabled ? '' : ' off'}`;
     const icon = document.createElement('div'); icon.className = 'symbol'; icon.textContent = item.repeat === 'daily' ? '🔁' : '⏰';
     const details = document.createElement('div'); details.className = 'details';
     const title = document.createElement('strong'); title.textContent = item.title;
-    const meta = document.createElement('small'); meta.textContent = `${item.repeat === 'daily' ? '每天 · ' : ''}${dateText(item.nextAt)}${item.enabled ? '' : ' · 已暂停'}`;
+    const meta = document.createElement('small'); meta.textContent = `${item.repeat === 'daily' ? '每天 · ' : ''}${dateText(item.nextAt)}${item.enabled ? '' : expired ? ' · 已到期' : ' · 已暂停'}`;
     details.append(title, meta);
-    const toggle = document.createElement('button'); toggle.textContent = item.enabled ? '⏸' : '▶'; toggle.title = item.enabled ? '暂停' : '开启'; toggle.onclick = () => window.yuexin.toggleReminder(item.id);
+    const toggle = document.createElement('button'); toggle.textContent = item.enabled ? '⏸' : expired ? '✓' : '▶'; toggle.title = item.enabled ? '暂停' : expired ? '已到期，请重新添加将来的提醒时间' : '开启'; toggle.disabled = expired; toggle.onclick = () => window.yuexin.toggleReminder(item.id);
     const remove = document.createElement('button'); remove.textContent = '×'; remove.title = '删除'; remove.onclick = () => window.yuexin.deleteReminder(item.id);
     card.append(icon, details, toggle, remove); list.append(card);
   });
+}
+
+function renderReminderInbox(items = []) {
+  const signature = JSON.stringify([items, [...reminderInboxPending]]);
+  if (signature === reminderInboxSignature) return;
+  reminderInboxSignature = signature;
+  const inbox = document.getElementById('reminder-inbox');
+  const opened = new Map([...inbox.querySelectorAll('details')].map((group) => [group.dataset.status, group.open]));
+  inbox.replaceChildren();
+  for (const [status, label, emptyText] of [['pending', '待处理', '到期的提醒会留在这里，直到你点“知道啦”。'], ['snoozed', '稍后提醒', '还没有延后的提醒。'], ['done', '已处理', '处理过的提醒会放在这里。']]) {
+    const entries = items.filter((item) => item.status === status).sort((a, b) => b.firedAt - a.firedAt);
+    const group = document.createElement('details'); group.className = 'card inbox-group ' + status; group.dataset.status = status;
+    group.open = opened.has(status) ? opened.get(status) : status === 'pending';
+    const heading = document.createElement('summary'); heading.textContent = label + ' · ' + entries.length; group.append(heading);
+    const list = document.createElement('div'); list.className = 'inbox-list';
+    if (!entries.length) { const empty = document.createElement('p'); empty.className = 'inbox-empty'; empty.textContent = emptyText; list.append(empty); }
+    for (const item of entries) {
+      const row = document.createElement('div'); row.className = 'inbox-alert'; row.dataset.id = item.id;
+      const title = document.createElement('strong'); title.textContent = item.title;
+      const time = document.createElement('small'); time.textContent = '到期于 ' + dateText(item.firedAt) + (status === 'snoozed' && item.snoozeAt ? ' · 将于 ' + dateText(item.snoozeAt) + ' 再提醒' : status === 'done' ? ' · 已知道啦' : ' · 等你处理');
+      row.append(title, time);
+      if (status !== 'done') {
+        const controls = document.createElement('div'); controls.className = 'inbox-alert-controls';
+        if (status === 'pending') {
+          for (const minutes of [5, 10]) {
+            const snooze = document.createElement('button'); snooze.className = 'secondary'; snooze.textContent = minutes + '分钟后'; snooze.disabled = reminderInboxPending.has(item.id); snooze.onclick = () => handleInboxAlert(item.id, true, minutes);
+            controls.append(snooze);
+          }
+        }
+        const dismiss = document.createElement('button'); dismiss.className = 'secondary'; dismiss.textContent = status === 'snoozed' ? '取消这次提醒' : '知道啦'; dismiss.disabled = reminderInboxPending.has(item.id); dismiss.onclick = () => handleInboxAlert(item.id, false);
+        controls.append(dismiss); row.append(controls);
+      }
+      list.append(row);
+    }
+    group.append(list); inbox.append(group);
+  }
+}
+async function handleInboxAlert(id, snooze, minutes = 5) {
+  if (reminderInboxPending.has(id)) return;
+  reminderInboxPending.add(id); renderReminderInbox(currentState.reminderInbox || []);
+  const status = document.getElementById('reminder-inbox-status'); status.textContent = '';
+  try {
+    const changed = snooze ? await window.yuexin.snoozeReminderAlert(id, minutes) : await window.yuexin.dismissReminderAlert(id);
+    render(await window.yuexin.getState());
+    status.textContent = changed ? snooze ? '好的，' + minutes + '分钟后再提醒你。' : '这条提醒已处理。' : '这条提醒已经更新。';
+  } catch (error) { status.textContent = error.message; }
+  finally { reminderInboxPending.delete(id); renderReminderInbox(currentState.reminderInbox || []); }
 }
 
 function renderLimits(limits) {
@@ -76,6 +129,7 @@ function render(state) {
   renderIdentity(state.petName);
   renderHabits(state);
   renderReminders(state.reminders);
+  renderReminderInbox(state.reminderInbox || []);
   renderLimits(state.limits);
   document.getElementById('always-on-top').checked = state.alwaysOnTop;
   document.getElementById('auto-start').checked = state.autoStart;
@@ -83,6 +137,7 @@ function render(state) {
   document.getElementById('random-interval').value = state.randomInterval;
   document.getElementById('pet-scale').value = Math.round(state.petScale * 100);
   document.getElementById('size-value').textContent = Math.round(state.petScale * 100) + '%';
+  document.getElementById('storage-recovered-hint').hidden = !state.storageRecovered;
   renderActions(state.customActions);
   renderFeeding(state.feeding);
   renderCompanion(state.companion);
@@ -201,7 +256,8 @@ function renderFocus(focus) {
   const main = document.getElementById('panel-focus-main');
   main.textContent = !session ? '开始专注' : session.status === 'paused' ? '继续' : '暂停'; main.disabled = focusPending;
   const end = document.getElementById('panel-focus-end'); end.hidden = !session; end.disabled = focusPending;
-  if (!focusPending) document.getElementById('panel-focus-status').textContent = !session ? '结束后提醒休息，完成的时间会记在日记里。' : session.phase === 'break' ? '喝口水、伸伸懒腰，再开始下一段。' : session.status === 'paused' ? '准备好后继续，暂停时间不会计入。' : '一次只做一件事，我在这里陪你。';
+  if (focusError) document.getElementById('panel-focus-status').textContent = focusError;
+  else if (!focusPending) document.getElementById('panel-focus-status').textContent = !session ? '结束后提醒休息，完成的时间会记在日记里。' : session.phase === 'break' ? '喝口水、伸伸懒腰，再开始下一段。' : session.status === 'paused' ? '准备好后继续，暂停时间不会计入。' : '一次只做一件事，我在这里陪你。';
   for (const [id, key] of [['focus-minutes', 'minutes'], ['focus-break-minutes', 'breakMinutes']]) {
     const input = document.getElementById(id);
     if (input.dataset.saved !== String(focus.settings[key])) {
@@ -213,11 +269,10 @@ function renderFocus(focus) {
 window.yuexin.onFocusState((focus) => { if (currentState) { currentState.focus = focus; renderFocus(focus); } });
 async function focusControl(operation) {
   if (focusPending) return;
-  focusPending = true; renderFocus(currentState.focus);
-  let failure;
+  focusError = ''; focusPending = true; renderFocus(currentState.focus);
   try { currentState.focus = await operation(); }
-  catch (error) { failure = error.message; }
-  finally { focusPending = false; renderFocus(currentState.focus); if (failure) document.getElementById('panel-focus-status').textContent = failure; }
+  catch (error) { focusError = error.message; }
+  finally { focusPending = false; renderFocus(currentState.focus); }
 }
 document.getElementById('panel-focus-main').onclick = () => focusControl(() => currentState.focus.session ? window.yuexin.toggleFocus() : window.yuexin.startFocus({ minutes: Number(document.getElementById('focus-minutes').value), breakMinutes: Number(document.getElementById('focus-break-minutes').value) }));
 document.getElementById('panel-focus-end').onclick = () => focusControl(() => window.yuexin.endFocus());
@@ -271,8 +326,8 @@ function renderFeeding(feeding) {
   document.getElementById('satiety-fill').style.width = value + '%';
   const meter = document.getElementById('satiety-meter');
   meter.setAttribute('aria-valuenow', value);
-  meter.classList.toggle('hungry', value <= 25);
-  document.getElementById('satiety-mood').textContent = feeding.isEating ? '正在认真吃饭，等一小会儿～' : value >= 100 ? '已经饱饱的啦，等肚子空一点再喂吧～' : value <= 25 ? '小肚子有点空了，来点好吃的吧～' : value >= 70 ? '吃得刚刚好，心情也很好～' : '再来一点小鱼干也不错～';
+  meter.classList.toggle('hungry', value < 30);
+  document.getElementById('satiety-mood').textContent = feeding.isEating ? '正在认真吃饭，等一小会儿～' : value >= 100 ? '已经饱饱的啦，等肚子空一点再喂吧～' : value < 30 ? '小肚子有点空了，来点好吃的吧～' : value >= 70 ? '吃得刚刚好，心情也很好～' : '再来一点小鱼干也不错～';
   const foodList = document.getElementById('food-list');
   if (!foodList.children.length) feeding.foods.forEach((food) => {
     const button = document.createElement('button'); button.className = 'food-card'; button.dataset.food = food.id;
@@ -376,6 +431,9 @@ const initialTime = new Date(Date.now() + 5 * 60000);
 timeInput.value = `${initialTime.getFullYear()}-${String(initialTime.getMonth()+1).padStart(2,'0')}-${String(initialTime.getDate()).padStart(2,'0')}T${String(initialTime.getHours()).padStart(2,'0')}:${String(initialTime.getMinutes()).padStart(2,'0')}`;
 document.getElementById('reminder-form').onsubmit = async (event) => {
   event.preventDefault();
+  if (reminderSubmitPending) return;
+  reminderSubmitPending = true;
+  const button = document.getElementById('add-reminder'); button.disabled = true;
   const error = document.getElementById('reminder-error'); error.textContent = '';
   try {
     await window.yuexin.addReminder({
@@ -386,6 +444,7 @@ document.getElementById('reminder-form').onsubmit = async (event) => {
     });
     document.getElementById('reminder-title').value = '';
   } catch (cause) { error.textContent = cause.message; }
+  finally { reminderSubmitPending = false; button.disabled = false; }
 };
 document.getElementById('refresh-limits').onclick = () => window.yuexin.refreshLimits();
 document.getElementById('connect-account').onclick = async () => {

@@ -18,6 +18,8 @@ const { normalizeTags } = require('./action-context');
 const { normalizePetName } = require('./pet-profile');
 const { normalizeRoaming, createWalkPlan, createReturnPlan, sampleWalk } = require('./roaming');
 const { performance } = require('node:perf_hooks');
+const { createStateStore } = require('./state-store');
+const { normalizeReminders, normalizeReminderInbox, collectDueReminders, snoozeAlert, dismissAlert } = require('./reminders');
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'yuexin-asset', privileges: { standard: true, secure: true, corsEnabled: true, supportFetchAPI: true } }]);
 
@@ -28,6 +30,9 @@ let panelWindow;
 let tray;
 let state;
 let stateFile;
+let stateStore;
+let storageRecovered = false;
+let quitting = false;
 let limits = { buckets: [], status: '正在读取…', updatedAt: null };
 const codex = new CodexClient({ getCliPath: () => state?.codexPath });
 let ignoringMouse = true;
@@ -36,6 +41,7 @@ let feedingBusy = false;
 let feedingEndTimer;
 let playSession = null;
 let lastFocusSave = 0;
+let lastFocusTick = performance.now();
 let walkSession = null;
 let walkDirection = 1;
 let nextWalkAt = 0;
@@ -72,38 +78,35 @@ function setAutoStart(enabled) {
 
 function loadState() {
   stateFile = path.join(app.getPath('userData'), 'state.json');
-  try {
-    const loaded = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-    return {
-      reminders: Array.isArray(loaded.reminders) ? loaded.reminders : [],
-      petPosition: loaded.petPosition || null,
-      petName: normalizePetName(loaded.petName), quietMode: loaded.quietMode === true,
-      roaming: normalizeRoaming(loaded.roaming),
-      alwaysOnTop: loaded.alwaysOnTop !== false,
-      petScale: normalizeScale(loaded.petScale ?? 1),
-      idleAnimations: loaded.idleAnimations !== false,
-      randomInterval: Math.max(10, Math.min(180, Number(loaded.randomInterval) || 30)),
-      bundledActionsVersion: Number(loaded.bundledActionsVersion) || 0,
-      codexPath: typeof loaded.codexPath === 'string' ? loaded.codexPath : null,
-      customActions: Array.isArray(loaded.customActions) ? loaded.customActions.filter(validCustomAction).map((entry) => ({ ...entry, random: entry.random !== false, tags: normalizeTags(entry) })) : [],
-      feeding: normalizeFeeding({ ...loaded.feeding, image: validCustomAction(loaded.feeding?.image) ? loaded.feeding.image : null }),
-      companion: normalizeCompanion(loaded.companion),
-      focus: normalizeFocus(loaded.focus), journal: normalizeJournal(loaded.journal),
-    };
-  } catch {
-    return { reminders: [], petPosition: null, petName: normalizePetName(), quietMode: false, roaming: normalizeRoaming(), alwaysOnTop: true, petScale: 1, idleAnimations: true, randomInterval: 30, bundledActionsVersion: 0, codexPath: null, customActions: [], feeding: normalizeFeeding(), companion: normalizeCompanion(), focus: normalizeFocus(), journal: normalizeJournal() };
-  }
+  stateStore = createStateStore(stateFile);
+  const restored = stateStore.read();
+  storageRecovered = restored.recovered;
+  const loaded = restored.state || {};
+  return {
+    reminders: normalizeReminders(loaded.reminders),
+    reminderInbox: normalizeReminderInbox(loaded.reminderInbox),
+    petPosition: loaded.petPosition || null,
+    petName: normalizePetName(loaded.petName), quietMode: loaded.quietMode === true,
+    roaming: normalizeRoaming(loaded.roaming),
+    alwaysOnTop: loaded.alwaysOnTop !== false,
+    petScale: normalizeScale(loaded.petScale ?? 1),
+    idleAnimations: loaded.idleAnimations !== false,
+    randomInterval: Math.max(10, Math.min(180, Number(loaded.randomInterval) || 30)),
+    bundledActionsVersion: Number(loaded.bundledActionsVersion) || 0,
+    codexPath: typeof loaded.codexPath === 'string' ? loaded.codexPath : null,
+    customActions: Array.isArray(loaded.customActions) ? loaded.customActions.filter(validCustomAction).map((entry) => ({ ...entry, random: entry.random !== false, tags: normalizeTags(entry) })) : [],
+    feeding: normalizeFeeding({ ...loaded.feeding, image: validCustomAction(loaded.feeding?.image) ? loaded.feeding.image : null }),
+    companion: normalizeCompanion(loaded.companion),
+    focus: normalizeFocus(loaded.focus), journal: normalizeJournal(loaded.journal),
+  };
 }
 
 function saveState() {
-  fs.mkdirSync(path.dirname(stateFile), { recursive: true });
-  const temp = `${stateFile}.tmp`;
-  fs.writeFileSync(temp, JSON.stringify(state, null, 2), 'utf8');
-  fs.renameSync(temp, stateFile);
+  stateStore.write(state);
 }
 
 function publicState() {
-  return { reminders: state.reminders, petName: state.petName, quietMode: state.quietMode, roaming: roamingView(), alwaysOnTop: state.alwaysOnTop, autoStart: getAutoStart(), petScale: state.petScale, idleAnimations: state.idleAnimations, randomInterval: state.randomInterval, customActions: state.customActions, feeding: { satiety: state.feeding.satiety, isEating: feedingBusy, foods: FOODS, image: feedingImage(), duration: state.feeding.duration }, companion: companionView(state.companion), focus: focusView(state.focus), journal: journalView(state.journal), limits };
+  return { reminders: state.reminders, reminderInbox: state.reminderInbox, storageRecovered, petName: state.petName, quietMode: state.quietMode, roaming: roamingView(), alwaysOnTop: state.alwaysOnTop, autoStart: getAutoStart(), petScale: state.petScale, idleAnimations: state.idleAnimations, randomInterval: state.randomInterval, customActions: state.customActions, feeding: { satiety: state.feeding.satiety, isEating: feedingBusy, foods: FOODS, image: feedingImage(), duration: state.feeding.duration }, companion: companionView(state.companion), focus: focusView(state.focus), journal: journalView(state.journal), limits };
 }
 
 function roamingView() {
@@ -159,11 +162,12 @@ function callHome() {
   return roamingView();
 }
 function canWalk() {
-  return petWindow && !petWindow.isDestroyed() && petWindow.isVisible() && !petDragging && !feedingBusy && !playSession && !state.companion.sleeping && !state.quietMode && !(state.focus.session?.phase === 'focus' && state.focus.session.status === 'running');
+  return petWindow && !petWindow.isDestroyed() && petWindow.isVisible() && !petDragging && !feedingBusy && !playSession && !state.companion.sleeping && !state.quietMode && !state.reminderInbox.some((entry) => entry.status === 'pending') && !(state.focus.session?.phase === 'focus' && state.focus.session.status === 'running');
 }
 function startWalking(automatic = false) {
   if (walkSession) return roamingView();
   if (!canWalk()) {
+    if (!automatic && state.reminderInbox.some((entry) => entry.status === 'pending')) throw new Error('先处理提醒，再出去走走吧～');
     if (!automatic) throw new Error('等吃完、睡醒或结束专注，再出去走走吧～');
     return roamingView();
   }
@@ -242,7 +246,10 @@ function notifyInteraction(result) {
 
 function refreshFocus() {
   const now = Date.now();
-  const result = tickFocus(state.focus, now);
+  const monotonicNow = performance.now();
+  const elapsed = Math.max(0, monotonicNow - lastFocusTick);
+  lastFocusTick = monotonicNow;
+  const result = tickFocus(state.focus, now, elapsed);
   if (!result.changed) return;
   if (result.event) {
     const event = result.event;
@@ -251,12 +258,12 @@ function refreshFocus() {
       event.reward = rewardFocus(state.companion, state.feeding.satiety, now);
       recordJournal(state.journal, 'focus', event, state.companion, now);
     }
-    saveState(); lastFocusSave = now; broadcastState();
+    saveState(); lastFocusSave = monotonicNow; broadcastState();
     petWindow?.webContents.send('focus:finished', event);
     const notification = new Notification({ title: state.petName + '陪你专注', body: event.kind === 'focus' ? `完成 ${event.minutes} 分钟专注，休息 ${event.breakMinutes} 分钟吧～` : '休息结束啦，准备好了再开始下一段吧～', silent: state.quietMode, icon: path.join(__dirname, '..', 'assets', 'yuexin-idle.png') });
     notification.on('click', showQuickFocus); notification.show();
   } else {
-    if (now - lastFocusSave >= 15000) { saveState(); lastFocusSave = now; }
+    if (monotonicNow - lastFocusSave >= 15000) { saveState(); lastFocusSave = monotonicNow; }
     for (const win of [petWindow, panelWindow]) if (win && !win.isDestroyed()) win.webContents.send('focus:changed', focusView(state.focus, now));
   }
 }
@@ -378,6 +385,7 @@ function createPet() {
   let samplingPixel = false;
   const pointerTimer = setInterval(() => {
     if (!petWindow || petWindow.isDestroyed()) return;
+    if (!petWindow.isVisible()) { setPetInteractive(false); return; }
     const cursor = screen.getCursorScreenPoint();
     const bounds = petWindow.getBounds();
     const point = { x: cursor.x - bounds.x, y: cursor.y - bounds.y };
@@ -428,6 +436,13 @@ function createPet() {
     clearTimeout(positionSaveTimer);
     positionSaveTimer = setTimeout(() => { positionSaveTimer = null; saveState(); }, 250);
   });
+  petWindow.on('close', (event) => {
+    if (quitting) return;
+    event.preventDefault();
+    stopWalking(true); petDragging = false; playSession = null;
+    petWindow.webContents.send('pet:hidden');
+    setPetInteractive(false); petWindow.hide();
+  });
   petWindow.on('closed', () => {
     walkSession = null;
     clearInterval(pointerTimer);
@@ -474,13 +489,8 @@ function fireReminder(reminder) {
 }
 
 function checkReminders() {
-  const now = Date.now();
-  const due = state.reminders.filter((item) => item.enabled && Number(item.nextAt) <= now);
+  const due = collectDueReminders(state.reminders, state.reminderInbox);
   if (!due.length) return;
-  for (const item of due) {
-    if (item.repeat === 'daily') item.nextAt = advanceDaily(item.nextAt, now);
-    else item.enabled = false;
-  }
   saveState();
   broadcastState();
   due.forEach(fireReminder);
@@ -520,7 +530,7 @@ function registerIpc() {
     fromApp(event); refreshFocus();
     startFocus(state.focus, input, Date.now(), crypto.randomUUID());
     stopWalking(); delayNextWalk();
-    playSession = null; saveState(); lastFocusSave = Date.now(); broadcastState();
+    playSession = null; saveState(); lastFocusSave = performance.now(); broadcastState();
     return focusView(state.focus);
   });
   ipcMain.handle('focus:toggle', (event) => {
@@ -656,7 +666,7 @@ function registerIpc() {
     if (!title || title.length > 100) throw new Error('提醒内容需要 1～100 个字');
     const repeat = input?.repeat === 'daily' ? 'daily' : 'once';
     const nextAt = repeat === 'daily' ? nextDailyTime(input.time) : Number(input?.timestamp);
-    if (!Number.isFinite(nextAt) || nextAt <= Date.now()) throw new Error('请选择将来的提醒时间');
+    if (!Number.isFinite(nextAt) || nextAt > 8640000000000000 || nextAt <= Date.now()) throw new Error('请选择将来的提醒时间');
     const reminder = { id: crypto.randomUUID(), title, repeat, nextAt, enabled: true };
     state.reminders.push(reminder);
     state.reminders.sort((a, b) => a.nextAt - b.nextAt);
@@ -673,7 +683,19 @@ function registerIpc() {
   });
   ipcMain.handle('reminder:delete', (_event, id) => {
     state.reminders = state.reminders.filter((entry) => entry.id !== id);
+    state.reminderInbox = state.reminderInbox.filter((entry) => entry.sourceId !== id);
     saveState(); broadcastState();
+  });
+  ipcMain.handle('reminder:snooze', (event, id, minutes) => {
+    fromApp(event);
+    snoozeAlert(state.reminderInbox, id, minutes);
+    saveState(); broadcastState(); return true;
+  });
+  ipcMain.handle('reminder:dismiss', (event, id) => {
+    fromApp(event);
+    const changed = dismissAlert(state.reminderInbox, id);
+    if (changed) { saveState(); broadcastState(); }
+    return changed;
   });
   ipcMain.handle('limits:refresh', () => refreshLimits());
   ipcMain.handle('account:connect', async () => {
@@ -826,7 +848,7 @@ app.whenReady().then(() => {
   delayNextWalk();
   setInterval(tickWalking, 40);
   setInterval(checkAutoWalk, 1000);
-  setInterval(checkReminders, 15000);
+  setInterval(checkReminders, 1000);
   setInterval(refreshLimits, 120000);
   setInterval(refreshSatiety, 60000);
   setInterval(refreshFocus, 1000);
@@ -836,5 +858,9 @@ app.whenReady().then(() => {
   screen.on('display-metrics-changed', () => { stopWalking(true); restoreHome(); });
   checkReminders();
   refreshLimits();
+}).catch((error) => {
+  console.error('月薪喵启动失败：', error);
+  dialog.showErrorBox('月薪喵暂时无法启动', '无法读取或保存本机设置：' + error.message);
+  app.quit();
 });
-app.on('before-quit', () => { stopWalking(true); pauseFocusForSystem(); codex.stop(); });
+app.on('before-quit', () => { quitting = true; stopWalking(true); pauseFocusForSystem(); codex.stop(); });

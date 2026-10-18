@@ -16,7 +16,14 @@ const playHud = document.getElementById('play-hud');
 const strokes = YuexinPetting.createPettingGesture();
 const focusButton = document.getElementById('focus-button');
 const focusMenu = document.getElementById('focus-menu');
+const reminderAlertCard = document.getElementById('reminder-alert-card');
 let focusPending = false;
+let focusError = '';
+let reminderAlertExpanded = true;
+let reminderAlertPending = false;
+let reminderAlertError = '';
+let activeReminderAlertId;
+let previousPendingAlertIds = new Set();
 let focusImageUrl;
 let pendingGreeting = false;
 let pendingCelebration = 0;
@@ -45,7 +52,7 @@ let habitPending = false;
 
 function reportActivity() {
   const menu = !quickFeedMenu.hidden || !companionMenu.hidden || !focusMenu.hidden || Boolean(play);
-  const info = { menu, busy: menu || Boolean(drag) || Boolean(feedingEntry) || Boolean(currentAction && currentAction !== 'walking') };
+  const info = { menu, busy: pendingReminderAlerts().length > 0 || menu || Boolean(drag) || Boolean(feedingEntry) || Boolean(currentAction && currentAction !== 'walking') };
   const signature = JSON.stringify(info);
   if (signature !== lastBusyReport) { lastBusyReport = signature; window.yuexin.setPetBusy(info); }
 }
@@ -53,7 +60,7 @@ function reportActivity() {
 function scheduleIdle() {
   reportActivity();
   clearTimeout(idleTimer);
-  if (!state.idleAnimations || state.quietMode || state.roaming?.isWalking || focusing() || feedingEntry || state.feeding?.isEating || state.companion?.sleeping || play || !quickFeedMenu.hidden || !companionMenu.hidden || !focusMenu.hidden) return;
+  if (!state.idleAnimations || state.quietMode || state.roaming?.isWalking || focusing() || feedingEntry || state.feeding?.isEating || state.companion?.sleeping || play || (pendingReminderAlerts().length > 0 && reminderAlertExpanded) || !quickFeedMenu.hidden || !companionMenu.hidden || !focusMenu.hidden) return;
   const wait = (state.randomInterval || 30) * 1000 * (.7 + Math.random() * .6);
   idleTimer = setTimeout(() => {
     if (!drag && !currentAction) randomAction();
@@ -68,6 +75,55 @@ function say(message, duration = 3000) {
   bubbleTimer = setTimeout(() => bubble.classList.remove('show'), duration);
 }
 window.yuexin.onHover((hover) => document.body.classList.toggle('over-pet', hover));
+function pendingReminderAlerts() {
+  return (state.reminderInbox || []).filter((item) => item.status === 'pending').sort((a, b) => a.firedAt - b.firedAt);
+}
+function renderReminderAlert() {
+  const pending = pendingReminderAlerts();
+  const active = pending[0];
+  if (active?.id !== activeReminderAlertId || pending.some((item) => !previousPendingAlertIds.has(item.id))) {
+    reminderAlertExpanded = true;
+    reminderAlertError = '';
+    if (active) clearTimeout(idleTimer);
+  }
+  activeReminderAlertId = active?.id;
+  previousPendingAlertIds = new Set(pending.map((item) => item.id));
+  reminderAlertCard.hidden = !active;
+  if (!active) return;
+  document.getElementById('reminder-alert-heading').textContent = reminderAlertExpanded ? '⏰ 提醒到了' : '⏰ 还有 ' + pending.length + ' 条提醒';
+  const toggle = document.getElementById('reminder-alert-toggle');
+  toggle.textContent = reminderAlertExpanded ? '收起' : '展开';
+  toggle.setAttribute('aria-expanded', String(reminderAlertExpanded));
+  toggle.setAttribute('aria-label', reminderAlertExpanded ? '折叠提醒，稍后再看' : '展开待处理提醒');
+  document.getElementById('reminder-alert-body').hidden = !reminderAlertExpanded;
+  const title = document.getElementById('reminder-alert-title');
+  if (title.textContent !== active.title) title.textContent = active.title;
+  document.getElementById('reminder-alert-count').textContent = pending.length > 1 ? '还有 ' + (pending.length - 1) + ' 条待处理' : '处理后才会收起，不怕错过。';
+  document.getElementById('reminder-alert-status').textContent = reminderAlertError;
+  document.getElementById('reminder-alert-snooze').disabled = reminderAlertPending;
+  document.getElementById('reminder-alert-dismiss').disabled = reminderAlertPending;
+  fitPopover(reminderAlertCard, 'right');
+}
+function collapseReminderAlert() {
+  if (!pendingReminderAlerts().length || !reminderAlertExpanded) return;
+  reminderAlertExpanded = false; renderReminderAlert(); scheduleIdle();
+}
+document.getElementById('reminder-alert-toggle').onclick = () => {
+  reminderAlertExpanded = !reminderAlertExpanded; renderReminderAlert(); scheduleIdle();
+};
+async function handleReminderAlert(snooze) {
+  const active = pendingReminderAlerts()[0];
+  if (!active || reminderAlertPending) return;
+  reminderAlertPending = true; reminderAlertError = ''; renderReminderAlert();
+  try {
+    if (snooze) await window.yuexin.snoozeReminderAlert(active.id, 5);
+    else await window.yuexin.dismissReminderAlert(active.id);
+    render(await window.yuexin.getState());
+  } catch (error) { reminderAlertError = error.message; }
+  finally { reminderAlertPending = false; renderReminderAlert(); scheduleIdle(); }
+}
+document.getElementById('reminder-alert-snooze').onclick = () => handleReminderAlert(true);
+document.getElementById('reminder-alert-dismiss').onclick = () => handleReminderAlert(false);
 function resetAction(resumeSleep = true) {
   clearTimeout(actionTimer);
   if (feedingEntry) { feedingEntry = null; window.yuexin.finishFeeding(); }
@@ -129,6 +185,7 @@ function randomAction() {
 }
 pet.addEventListener('pointerdown', async (event) => {
   if (event.button !== 0) return;
+  collapseReminderAlert();
   pet.setPointerCapture(event.pointerId);
   const gesture = { x: event.screenX, y: event.screenY, position: null, moved: false };
   drag = gesture;
@@ -178,11 +235,11 @@ function fitPopover(menu, origin) {
   menu.style[origin] = 8 / scale + 'px';
   menu.style.maxHeight = Math.max(140, 285 * scale - 10) + 'px';
   menu.style.overflowY = 'auto';
-  const preferredTop = menu === focusMenu ? 171 : menu === companionMenu ? 123 : 75;
+  const preferredTop = menu === reminderAlertCard ? 5 : menu === focusMenu ? 171 : menu === companionMenu ? 123 : 75;
   if (!menu.hidden) menu.style.top = Math.max(3, Math.min(preferredTop * scale, 285 * scale - menu.offsetHeight - 5)) / scale + 'px';
 }
 function setQuickFeedOpen(open) {
-  if (open) { setCompanionOpen(false); setFocusOpen(false); stopPlay(); }
+  if (open) { collapseReminderAlert(); setCompanionOpen(false); setFocusOpen(false); stopPlay(); }
   quickFeedMenu.hidden = !open;
   satietyButton.setAttribute('aria-expanded', String(open));
   renderQuickFeeding();
@@ -197,7 +254,7 @@ document.addEventListener('pointerdown', (event) => {
   if (!companionMenu.hidden && !companionMenu.contains(event.target) && !moodButton.contains(event.target)) setCompanionOpen(false);
   if (!focusMenu.hidden && !focusMenu.contains(event.target) && !focusButton.contains(event.target)) setFocusOpen(false);
 });
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { setQuickFeedOpen(false); setCompanionOpen(false); setFocusOpen(false); stopPlay(); } });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { collapseReminderAlert(); setQuickFeedOpen(false); setCompanionOpen(false); setFocusOpen(false); stopPlay(); } });
 window.addEventListener('blur', () => { setQuickFeedOpen(false); setCompanionOpen(false); setFocusOpen(false); });
 window.yuexin.onFeedingMenu(() => setQuickFeedOpen(true));
 for (const foodId of ['fish', 'snack', 'can']) {
@@ -229,7 +286,7 @@ function renderQuickFeeding(updateStatus = true) {
 }
 
 function setCompanionOpen(open) {
-  if (open) { setQuickFeedOpen(false); setFocusOpen(false); stopPlay(); }
+  if (open) { collapseReminderAlert(); setQuickFeedOpen(false); setFocusOpen(false); stopPlay(); }
   companionMenu.hidden = !open;
   moodButton.setAttribute('aria-expanded', String(open));
   renderCompanion();
@@ -276,8 +333,8 @@ function renderCompanion(updateStatus = true) {
   const walkButton = document.getElementById('walk-button');
   const returning = state.roaming?.isWalking || state.roaming?.awayFromHome;
   walkButton.textContent = returning ? '🏠 回小窝' : '🐾 出去走走';
-  walkButton.disabled = habitPending || (!returning && (busy || sleeping || focusing() || state.quietMode));
-  walkButton.title = returning ? '回到你上次拖放的位置' : state.quietMode ? '关闭安静陪伴后再出去走走' : '在小窝附近走一小段，自己回来';
+  walkButton.disabled = habitPending || (!returning && (busy || sleeping || focusing() || state.quietMode || pendingReminderAlerts().length > 0));
+  walkButton.title = returning ? '回到你上次拖放的位置' : pendingReminderAlerts().length > 0 ? '先看看待处理提醒，再出去走走' : state.quietMode ? '关闭安静陪伴后再出去走走' : '在小窝附近走一小段，自己回来';
   const quietButton = document.getElementById('quiet-button');
   quietButton.textContent = state.quietMode ? '☀ 恢复活力' : '🌙 安静陪伴';
   quietButton.disabled = habitPending; quietButton.setAttribute('aria-pressed', String(Boolean(state.quietMode)));
@@ -369,7 +426,8 @@ function tryCelebration() {
   playAction(entry?.id || 'hop'); showHearts(); return true;
 }
 function setFocusOpen(open) {
-  if (open) { setQuickFeedOpen(false); setCompanionOpen(false); stopPlay(); }
+  if (open) { collapseReminderAlert(); setQuickFeedOpen(false); setCompanionOpen(false); stopPlay(); }
+  focusError = '';
   focusMenu.hidden = !open; focusButton.setAttribute('aria-expanded', String(open)); renderFocus();
   if (open) clearTimeout(idleTimer); else scheduleIdle();
   reportActivity();
@@ -404,14 +462,15 @@ function renderFocus(updateStatus = true) {
   const main = document.getElementById('quick-focus-main');
   main.textContent = !session ? '开始专注' : session.status === 'paused' ? '继续' : '暂停'; main.disabled = focusPending;
   const end = document.getElementById('quick-focus-end'); end.hidden = !session; end.disabled = focusPending;
-  if (updateStatus) document.getElementById('quick-focus-status').textContent = !session ? '安静陪你，结束后休息 ' + focus.settings.breakMinutes + ' 分钟。' : session.phase === 'break' ? '伸个懒腰，可以一起玩一会儿～' : session.status === 'paused' ? '准备好了再继续，不着急。' : '安静陪你，结束后提醒休息。';
+  if (focusError) document.getElementById('quick-focus-status').textContent = focusError;
+  else if (updateStatus) document.getElementById('quick-focus-status').textContent = !session ? '安静陪你，结束后休息 ' + focus.settings.breakMinutes + ' 分钟。' : session.phase === 'break' ? '伸个懒腰，可以一起玩一会儿～' : session.status === 'paused' ? '准备好了再继续，不着急。' : '安静陪你，结束后提醒休息。';
   fitPopover(focusMenu, 'right');
 }
 async function focusControl(operation) {
   if (focusPending) return;
-  focusPending = true; renderFocus(false);
+  focusPending = true; focusError = ''; renderFocus();
   try { await operation(); }
-  catch (error) { document.getElementById('quick-focus-status').textContent = error.message; }
+  catch (error) { focusError = error.message; }
   finally { focusPending = false; renderFocus(false); }
 }
 document.getElementById('quick-focus-main').onclick = () => focusControl(() => state.focus?.session ? window.yuexin.toggleFocus() : window.yuexin.startFocus({ minutes: Number(document.getElementById('quick-focus-minutes').value) }));
@@ -535,7 +594,7 @@ function render(nextState) {
   const wasFocusing = focusing();
   const wasQuiet = Boolean(state.quietMode);
   state = nextState;
-  const signature = JSON.stringify([state.idleAnimations, state.quietMode, state.roaming?.isWalking, state.randomInterval, state.feeding?.isEating, state.companion?.sleeping, focusing(), YuexinContext.contextTag(state), state.customActions.map((item) => [item.id, item.random, item.tags])]);
+  const signature = JSON.stringify([state.idleAnimations, state.quietMode, state.roaming?.isWalking, state.randomInterval, state.feeding?.isEating, state.companion?.sleeping, focusing(), (state.reminderInbox || []).filter((item) => item.status === 'pending').map((item) => item.id), YuexinContext.contextTag(state), state.customActions.map((item) => [item.id, item.random, item.tags])]);
   if (signature !== idleSignature) { idleSignature = signature; scheduleIdle(); }
   stage.style.transform = 'scale(' + (state.petScale || 1) + ')';
   pet.classList.toggle('quiet', !state.idleAnimations || state.quietMode || focusing());
@@ -549,6 +608,7 @@ function render(nextState) {
   renderQuickFeeding();
   renderCompanion();
   renderFocus();
+  renderReminderAlert();
   document.getElementById('idle-image').alt = state.petName || '月薪喵';
   reportActivity();
   const codex = state.limits.buckets.find((entry) => entry.id === 'codex') || state.limits.buckets[0];
@@ -578,10 +638,16 @@ window.yuexin.onReminder((title) => {
   currentAction = 'reminder';
   pet.classList.add('performing');
   if (!state.quietMode) { pet.classList.add('alarm'); effect.textContent = '⏰'; }
-  say('提醒时间到：' + title, 9000);
+  if (pendingReminderAlerts().length) { clearTimeout(bubbleTimer); bubble.classList.remove('show'); }
+  else say('提醒时间到：' + title, 9000);
   actionTimer = setTimeout(resetAction, 3200);
   chime();
+  reminderAlertExpanded = true; renderReminderAlert();
   reportActivity();
+});
+window.yuexin.onHidden?.(() => {
+  drag = null; window.yuexin.setPetDragging(false); pet.classList.remove('dragging');
+  stopPlay(); setQuickFeedOpen(false); setCompanionOpen(false); setFocusOpen(false); reportActivity();
 });
 function chime() {
   if (state.quietMode) return;

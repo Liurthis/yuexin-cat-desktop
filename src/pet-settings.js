@@ -11,8 +11,9 @@ function petBounds(scale, previous, workArea) {
   const y = previous ? previous.y + previous.height - height : workArea.y + workArea.height - height - 25;
   return {
     width, height,
-    x: Math.round(Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - width))),
-    y: Math.round(Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - height))),
+    // Resize and startup coordinates go through Electron's native converter too.
+    x: Math.round(Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - width))) || 0,
+    y: Math.round(Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - height))) || 0,
   };
 }
 function validCustomAction(action) {

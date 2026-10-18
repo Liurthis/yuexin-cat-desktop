@@ -10,6 +10,15 @@
 <body>
   <div id="stage" class="stage">
     <div id="bubble" class="bubble" role="status"></div>
+    <div id="reminder-alert-card" class="reminder-alert-card" role="group" aria-label="待处理提醒" hidden>
+      <div class="reminder-alert-heading"><strong id="reminder-alert-heading">⏰ 提醒到了</strong><button id="reminder-alert-toggle" aria-label="折叠提醒" aria-expanded="true" aria-controls="reminder-alert-body">收起</button></div>
+      <div id="reminder-alert-body">
+        <div id="reminder-alert-title" class="reminder-alert-title" tabindex="0"></div>
+        <p id="reminder-alert-count" class="reminder-alert-count"></p>
+        <div class="reminder-alert-controls"><button id="reminder-alert-snooze">5分钟后</button><button id="reminder-alert-dismiss">知道啦</button></div>
+        <p id="reminder-alert-status" class="reminder-alert-status" role="status"></p>
+      </div>
+    </div>
     <button id="mood-button" class="mood-button" aria-label="查看心情和亲密度" aria-expanded="false" aria-controls="companion-menu" title="查看心情和亲密度"><span id="mood-emoji">😊</span><small id="mood-number">75</small></button>
     <div id="companion-menu" class="companion-menu" role="group" aria-label="陪伴月薪喵" hidden>
       <div class="companion-heading"><strong id="mood-label">😊 开心 · 75</strong><button id="companion-close" aria-label="收起陪伴选项">×</button></div>

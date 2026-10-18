@@ -69,10 +69,12 @@
     </section>
     <section id="reminders" class="page active">
       <div class="section-title"><div><h2>提醒事项</h2><p>时间一到，月薪喵会跳起来叫你。</p></div></div>
+      <div id="reminder-inbox" class="reminder-inbox" aria-label="到期提醒记录"></div>
+      <p id="reminder-inbox-status" class="hint" role="status"></p>
       <form id="reminder-form" class="card form">
         <label>提醒我做什么<input id="reminder-title" maxlength="100" placeholder="比如：喝水、开会、交报告" required></label>
         <div class="row"><label id="once-field">提醒时间<input id="reminder-time" type="datetime-local"></label><label id="daily-field" hidden>每天几点<input id="daily-time" type="time" value="09:00"></label><label class="repeat">频率<select id="reminder-repeat"><option value="once">仅一次</option><option value="daily">每天</option></select></label></div>
-        <button class="primary" type="submit">添加提醒</button><p id="reminder-error" class="error" role="alert"></p>
+        <button id="add-reminder" class="primary" type="submit">添加提醒</button><p id="reminder-error" class="error" role="alert"></p>
       </form>
       <h3 class="list-heading">我的提醒</h3>
       <div id="reminder-list" class="list"></div>
@@ -104,6 +106,7 @@
     </section>
     <section id="settings" class="page">
       <div class="section-title"><div><h2>桌宠设置</h2><p>调好习惯，让月薪喵陪在你身边。</p></div></div>
+      <p id="storage-recovered-hint" class="hint recovery-hint" role="status" hidden>已从本机备份恢复上次设置，原始文件也已保留。</p>
       <div class="card habits-setting">
         <h3>猫咪的小习惯</h3>
         <form id="pet-name-form" class="pet-name-form">

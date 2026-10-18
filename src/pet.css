@@ -4,6 +4,24 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .stage { width: 260px; height: 285px; position: absolute; left: 0; top: 0; transform-origin: top left; }
 .bubble { position: absolute; z-index: 3; left: 5px; top: 3px; max-width: 250px; min-width: 60px; padding: 8px 12px; border: 2px solid #6d4938; border-radius: 17px 17px 17px 5px; background: #fff9ee; color: #5a3d32; font-size: 12px; line-height: 1.35; box-shadow: 0 3px 0 #dbc6ad; opacity: 0; transform: translateY(7px) scale(.95); transition: opacity .2s, transform .2s; pointer-events: none; }
 .bubble.show { opacity: 1; transform: translateY(0) scale(1); }
+.reminder-alert-card { position:absolute; z-index:9; top:5px; right:8px; width:224px; padding:10px; border:1px solid #cfad80; border-radius:14px; background:#fff7e6; color:#493227; box-shadow:0 4px 12px rgba(86,55,37,.2); transform-origin:top right; }
+.reminder-alert-heading { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.reminder-alert-heading strong { min-width:0; font-size:13px; line-height:20px; }
+.reminder-alert-heading button { flex:none; padding:2px 4px; border:0; border-radius:5px; color:#79583b; background:transparent; font:12px/18px "Microsoft YaHei",sans-serif; cursor:pointer; }
+.reminder-alert-title { max-height:72px; overflow:auto; overflow-wrap:anywhere; white-space:pre-wrap; margin-top:7px; font-size:14px; line-height:20px; }
+.reminder-alert-count { margin:5px 0 0; font-size:12px; line-height:16px; color:#79583b; }
+.reminder-alert-controls { display:flex; gap:6px; margin-top:8px; }
+.reminder-alert-controls button { flex:1; padding:6px 2px; border:1px solid #d8bea2; border-radius:8px; color:#5e432e; background:#fffdf8; font:600 13px/18px "Microsoft YaHei",sans-serif; cursor:pointer; }
+.reminder-alert-controls button:last-child { background:#f3dfbc; border-color:#d3b384; }
+.reminder-alert-controls button:disabled { cursor:wait; opacity:.55; }
+.reminder-alert-status { margin:6px 0 0; color:#b2362e; font-size:12px; line-height:16px; overflow-wrap:anywhere; }
+.reminder-alert-status:empty { display:none; }
+.reminder-alert-card.compact { padding:6px; border-radius:11px; }
+.reminder-alert-card.compact .reminder-alert-title { max-height:48px; font-size:12px; line-height:16px; margin-top:4px; }
+.reminder-alert-card.compact .reminder-alert-count { margin-top:4px; }
+.reminder-alert-card.compact .reminder-alert-controls { margin-top:5px; }
+.reminder-alert-card.compact .reminder-alert-controls button { padding:4px 1px; font-size:12px; line-height:17px; }
+.reminder-alert-card button:focus-visible,.reminder-alert-title:focus-visible { outline:2px solid #315eb5; outline-offset:2px; }
 .satiety-button { position:absolute; z-index:7; top:27px; right:12px; width:40px; height:40px; padding:0; border:2px solid #fffaf1; border-radius:50%; background:conic-gradient(#579464 252deg,#e9e1d6 0deg); box-shadow:0 2px 6px rgba(86,55,37,.2); cursor:pointer; display:grid; place-items:center; }
 .satiety-button::before { content:''; position:absolute; inset:5px; border-radius:50%; background:#fffaf1; }
 .satiety-number { position:relative; z-index:1; color:#315d3d; font-size:11px; font-weight:800; line-height:1; }
